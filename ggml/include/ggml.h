@@ -242,6 +242,7 @@
 #define GGML_ROPE_TYPE_NEOX   2
 #define GGML_ROPE_TYPE_MROPE  8
 #define GGML_ROPE_TYPE_VISION 24
+#define GGML_ROPE_TYPE_IMROPE 40 // binary: 101000
 
 #define GGML_MROPE_SECTIONS   4
 
@@ -576,6 +577,11 @@ extern "C" {
         GGML_UNARY_OP_HARDSIGMOID,
         GGML_UNARY_OP_EXP,
         GGML_UNARY_OP_GELU_ERF,
+        GGML_UNARY_OP_XIELU,
+        GGML_UNARY_OP_FLOOR,
+        GGML_UNARY_OP_CEIL,
+        GGML_UNARY_OP_ROUND,
+        GGML_UNARY_OP_TRUNC,
 
         GGML_UNARY_OP_COUNT,
     };
@@ -1150,6 +1156,58 @@ extern "C" {
             struct ggml_context * ctx,
             struct ggml_tensor  * a);
 
+    GGML_API struct ggml_tensor * ggml_floor(
+            struct ggml_context * ctx,
+            struct ggml_tensor  * a);
+
+    GGML_API struct ggml_tensor * ggml_floor_inplace(
+            struct ggml_context * ctx,
+            struct ggml_tensor  * a);
+
+    GGML_API struct ggml_tensor * ggml_ceil(
+            struct ggml_context * ctx,
+            struct ggml_tensor  * a);
+
+    GGML_API struct ggml_tensor * ggml_ceil_inplace(
+            struct ggml_context * ctx,
+            struct ggml_tensor  * a);
+
+    GGML_API struct ggml_tensor * ggml_round(
+            struct ggml_context * ctx,
+            struct ggml_tensor  * a);
+
+    GGML_API struct ggml_tensor * ggml_round_inplace(
+            struct ggml_context * ctx,
+            struct ggml_tensor  * a);
+
+     /**
+     * Truncates the fractional part of each element in the tensor (towards zero).
+     * For example: trunc(3.7) = 3.0, trunc(-2.9) = -2.0
+     * Similar to std::trunc in C/C++.
+     */
+
+    GGML_API struct ggml_tensor * ggml_trunc(
+            struct ggml_context * ctx,
+            struct ggml_tensor  * a);
+
+    GGML_API struct ggml_tensor * ggml_trunc_inplace(
+            struct ggml_context * ctx,
+            struct ggml_tensor  * a);
+
+
+
+    // xIELU activation function
+    // x = x * (c_a(alpha_n) + c_b(alpha_p, beta) * sigmoid(beta * x)) + eps * (x > 0)
+    // where c_a = softplus and c_b(a, b) = softplus(a) + b are constraining functions
+    // that constrain the positive and negative source alpha values respectively
+    GGML_API struct ggml_tensor * ggml_xielu(
+            struct ggml_context * ctx,
+            struct ggml_tensor  * a,
+            float alpha_n,
+            float alpha_p,
+            float beta,
+            float eps);
+
     // gated linear unit ops
     // A: n columns, r rows,
     // result is n / 2 columns, r rows,
@@ -1617,6 +1675,13 @@ extern "C" {
             float                 scale,
             float                 max_bias);
 
+    GGML_API struct ggml_tensor * ggml_soft_max_ext_inplace(
+            struct ggml_context * ctx,
+            struct ggml_tensor  * a,
+            struct ggml_tensor  * mask,
+            float                 scale,
+            float                 max_bias);
+
     GGML_API void ggml_soft_max_add_sinks(
             struct ggml_tensor * a,
             struct ggml_tensor * sinks);
@@ -2043,6 +2108,7 @@ extern "C" {
     enum ggml_scale_mode {
         GGML_SCALE_MODE_NEAREST  = 0,
         GGML_SCALE_MODE_BILINEAR = 1,
+        GGML_SCALE_MODE_BICUBIC  = 2,
 
         GGML_SCALE_MODE_COUNT
     };

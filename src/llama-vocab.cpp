@@ -347,6 +347,7 @@ struct llm_tokenizer_bpe : llm_tokenizer {
             case LLAMA_VOCAB_PRE_TYPE_OLMO:
             case LLAMA_VOCAB_PRE_TYPE_JAIS:
             case LLAMA_VOCAB_PRE_TYPE_TRILLION:
+            case LLAMA_VOCAB_PRE_TYPE_GRANITE_DOCLING:
                 regex_exprs = {
                     "'s|'t|'re|'ve|'m|'ll|'d| ?\\p{L}+| ?\\p{N}+| ?[^\\s\\p{L}\\p{N}]+|\\s+(?!\\S)",
                 };
@@ -400,6 +401,7 @@ struct llm_tokenizer_bpe : llm_tokenizer {
                 };
                 break;
             case LLAMA_VOCAB_PRE_TYPE_GPT4O:
+            case LLAMA_VOCAB_PRE_TYPE_MINIMAX_M2:
                 regex_exprs = {
                     // original regex from tokenizer.json
                     // "[^\\r\\n\\p{L}\\p{N}]?[\\p{Lu}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}]*[\\p{Ll}\\p{Lm}\\p{Lo}\\p{M}]+(?i:'s|'t|'re|'ve|'m|'ll|'d)?|[^\\r\\n\\p{L}\\p{N}]?[\\p{Lu}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}]+[\\p{Ll}\\p{Lm}\\p{Lo}\\p{M}]*(?i:'s|'t|'re|'ve|'m|'ll|'d)?|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n/]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
@@ -1962,7 +1964,12 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
                 pre_type = LLAMA_VOCAB_PRE_TYPE_TRILLION;
                 clean_spaces = false;
             } else if (
+                tokenizer_pre == "granite-docling") {
+                pre_type = LLAMA_VOCAB_PRE_TYPE_GRANITE_DOCLING;
+                clean_spaces = false;
+            } else if (
                 tokenizer_pre == "bailingmoe" ||
+                tokenizer_pre == "bailingmoe2" ||
                 tokenizer_pre == "llada-moe") {
                 pre_type = LLAMA_VOCAB_PRE_TYPE_BAILINGMOE;
                 clean_spaces = false;
@@ -1985,6 +1992,10 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
             } else if (
                 tokenizer_pre == "grok-2") {
                 pre_type = LLAMA_VOCAB_PRE_TYPE_GROK_2;
+                clean_spaces = false;
+            } else if (
+                tokenizer_pre == "minimax-m2") {
+                pre_type = LLAMA_VOCAB_PRE_TYPE_MINIMAX_M2;
                 clean_spaces = false;
             } else {
                 throw std::runtime_error(format("unknown pre-tokenizer type: '%s'", tokenizer_pre.c_str()));
@@ -2166,6 +2177,7 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
                         || t.first == "<|end|>"
                         || t.first == "<end_of_turn>"
                         || t.first == "<|endoftext|>"
+                        || t.first == "<|end_of_text|>" // granite
                         || t.first == "<EOT>"
                         || t.first == "_<EOT>"
                         || t.first == "<｜end▁of▁sentence｜>" // DeepSeek
