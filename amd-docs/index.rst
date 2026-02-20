@@ -20,17 +20,17 @@ The llama.cpp public repository is located at `https://github.com/ROCm/llama.cpp
 .. grid:: 2
   :gutter: 3
 
-   .. grid-item-card:: Install
+  .. grid-item-card:: Install
 
-      * :doc:`Install llama.cpp <install/llama-cpp-install>`
+    * :doc:`Install llama.cpp <install/llama-cpp-install>`
 
-   .. grid-item-card:: Examples
+  .. grid-item-card:: Examples
 
-      * :doc:`Run a llama.cpp example <install/llama-cpp-examples>`
+    * :doc:`Run a llama.cpp example <install/llama-cpp-examples>`
 
-   .. grid-item-card:: Reference
+  .. grid-item-card:: Reference
 
-      * `API reference (upstream) <https://llama-cpp-python.readthedocs.io/en/latest/api-reference/>`__
+      * `API reference (upstream) <https://llama-cpp-python.readthedocs.io/en/latest/api-reference.html>`__
 
 To contribute to the documentation, refer to
 `Contributing to ROCm <https://rocm.docs.amd.com/en/latest/contribute/contributing.html>`_.
