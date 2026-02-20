@@ -26,7 +26,7 @@ The llama.cpp public repository is located at `https://github.com/ROCm/llama.cpp
 
   .. grid-item-card:: Examples
 
-    * :doc:`Run a llama.cpp example <install/llama-cpp-examples>`
+    * :doc:`Run a llama.cpp example <examples/llama-cpp-examples>`
 
   .. grid-item-card:: Reference
 
