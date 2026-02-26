@@ -240,13 +240,16 @@ The prebuilt base Docker image has all dependencies installed, including:
 
 1. Choose your base Ubuntu Docker image with the correct ROCm version.
 
-  +----------------+----------------------------------------------+
-  | Ubuntu Version | Base Image                                   |
-  +================+==============================================+
-  | 24.04          | ``rocm/dev-ubuntu-24.04:7.0-complete``       |
-  +----------------+----------------------------------------------+
-  | 22.04          | ``rocm/dev-ubuntu-22.04:7.0-complete``       |
-  +----------------+----------------------------------------------+
+   .. list-table::
+     :header-rows: 1
+     :widths: 20 80
+
+     * - Ubuntu Version
+       - Base Image
+     * - 24.04
+       - ``rocm/dev-ubuntu-24.04:7.0-complete``
+     * - 22.04
+       - ``rocm/dev-ubuntu-22.04:7.0-complete``
 
 2. Start your local container from the base image. The following example uses ``rocm/dev-ubuntu-24.04:7.0-complete``:
 
