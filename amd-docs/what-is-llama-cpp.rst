@@ -8,12 +8,12 @@
 What is llama.cpp?
 ********************************************************************
 
-`llama.cpp <https://github.com/ggml-org/llama.cpp>`__ is an open-source framework 
-for Large Language Model (LLM) inference that runs on both central processing units 
+`llama.cpp <https://github.com/ggml-org/llama.cpp>`__ is an open-source inference library and
+framework for Large Language Models (LLMs) that runs on both central processing units 
 (CPUs) and graphics processing units (GPUs). It is written in plain C/C++, providing 
 a simple, dependency-free setup. 
 
-The framework supports multiple quantization options, from 1.5-bit to 8-bit integers, 
+llama.cpp on ROCm supports multiple quantization options, from 1.5-bit to 8-bit integers, 
 to accelerate inference and reduce memory usage. Originally built as a CPU-first library, 
 llama.cpp is easy to integrate with other programming environments and is widely 
 adopted across diverse platforms, including consumer devices. 
