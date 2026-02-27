@@ -56,17 +56,17 @@ llama.cpp is commonly used in the following scenarios:
 
 llama.cpp can also be used particularly when you need to meet one or more of the following requirements:
 
-- Plain C/C++ implementation with no external dependencies for simple builds
-  and portable deployment.
+1. Plain C/C++ implementation with no external dependencies for simple builds
+   and portable deployment.
 
-- Support for 1.5-bit, 2-bit, 3-bit, 4-bit, 5-bit, 6-bit, and 8-bit integer
-  quantization enabling faster inference and reduced memory usage.
+2. Support for 1.5-bit, 2-bit, 3-bit, 4-bit, 5-bit, 6-bit, and 8-bit integer
+   quantization enabling faster inference and reduced memory usage.
 
-- Custom `HIP <https://rocm.docs.amd.com/projects/HIP/en/latest/index.html>`__ kernels for
-  running LLMs on AMD GPUs with ROCm to accelerate attention and related operations.
+3. Custom `HIP <https://rocm.docs.amd.com/projects/HIP/en/latest/index.html>`__ kernels for
+   running LLMs on AMD GPUs with ROCm to accelerate attention and related operations.
 
-- CPU and GPU hybrid inference to partially accelerate models larger than the
-  total available VRAM by offloading selective computations to the GPU.
+4. CPU and GPU hybrid inference to partially accelerate models larger than the
+   total available VRAM by offloading selective computations to the GPU.
 
 llama.cpp is also used in a range of real-world applications, including:
 
