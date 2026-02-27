@@ -5,15 +5,19 @@
 .. _llama-cpp-documentation-index:
 
 ********************************************************************
-llama.cpp documentation
+llama.cpp on ROCm documentation
 ********************************************************************
+
+Run llama.cpp on ROCm to deliver optimized LLM inference on AMD Instinct
+GPUs and CPUs, enabling low-latency, memory-efficient on-prem deployments
+for chat, summarization, and code assistance.
 
 `llama.cpp <https://github.com/ggml-org/llama.cpp>`__ is an open-source framework 
 for Large Language Model (LLM) inference that runs on both central processing units 
-(CPUs) and graphics processing units (GPUs). 
+(CPUs) and graphics processing units (GPUs).
 
 llama.cpp is part of the `ROCm-LLMExt toolkit
-<https://rocm.docs.amd.com/projects/rocm-llmext/en/latest/>`__.
+<https://rocm.docs.amd.com/projects/rocm-llmext/en/docs-25.08/>`__.
 
 The llama.cpp public repository is located at `https://github.com/ROCm/llama.cpp <https://github.com/ROCm/llama.cpp>`__.
 

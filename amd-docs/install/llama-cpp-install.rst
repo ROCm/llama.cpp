@@ -44,7 +44,7 @@ your corresponding ROCm version.
       - hipBLASLt is an extension of the hipBLAS library, providing additional
         features like epilogues fused into the matrix multiplication kernel or
         use of integer tensor cores.
-      - By setting the flag ``ROCBLAS_USE_HIPBLASLT``, you can dispatch hipblasLt
+      - By setting the flag ``ROCBLAS_USE_HIPBLASLT``, you can dispatch hipBLASLt
         kernels where possible.
     * - `rocWMMA <https://github.com/ROCm/rocWMMA>`__
       - 1.7.0
@@ -52,7 +52,7 @@ your corresponding ROCm version.
         multiplication (GEMM) and accumulation operations with mixed precision
         support.
       - Can be used to enhance the flash attention performance on AMD compute, by enabling
-        the flag during compile time.
+        the flag at compile time.
 
 Install llama.cpp
 ================================================================================
@@ -60,7 +60,7 @@ Install llama.cpp
 To install llama.cpp on ROCm, you have the following options:
 
 - :ref:`Use the prebuilt Docker image <use-docker-with-llama-cpp-pre-installed>` **(recommended)**
-- :ref:`Build your own docker image <build-your-llama-cpp-rocm-docker-image>`
+- :ref:`Build your own Docker image <build-your-llama-cpp-rocm-docker-image>`
 
 .. _use-docker-with-llama-cpp-pre-installed:
 
@@ -145,8 +145,8 @@ and other dependencies.
 
    .. note::
 
-       This will automatically download the image if it does not exist on the host. You can
-       also pass the ``-v`` argument to mount any data directories from the host onto the container.
+      This step will automatically download the image if it does not exist on the host. You can
+      also pass the ``-v`` argument to mount any data directories from the host onto the container.
 
 Docker image support
 --------------------------------------------------------------------------------------
@@ -205,8 +205,8 @@ ROCm Ubuntu base Docker image.
 The prebuilt base Docker image has all dependencies installed, including:
 
 * ROCm
-* hipBlas
-* hipBlasLt
+* hipBLAS
+* hipBLASLt
 * rocWMMA
 
 1. Start your local container from the base ROCm 6.4.0 image:
@@ -225,9 +225,9 @@ The prebuilt base Docker image has all dependencies installed, including:
             -v $MODEL_PATH:/data
             rocm/dev-ubuntu-24.04:6.4-complete
 
-Once inside the docker container, run the following steps:
+Once inside the Docker container, run the following steps:
 
-2. Setup your workspace:
+2. Set up your workspace:
 
    .. code-block:: bash
 
@@ -283,6 +283,6 @@ To run unit tests manually and validate your installation fully, follow these st
       cd /workspace/llama.cpp
       ./build/bin/test-backend-ops
 
-.. note::
+   .. note::
 
-   Running unit tests requires at least one AMD GPU.
+      Running unit tests requires at least one AMD GPU.

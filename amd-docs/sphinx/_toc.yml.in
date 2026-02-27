@@ -26,7 +26,7 @@ subtrees:
   entries:
   - url: https://rocm.blogs.amd.com/ecosystems-and-partners/llama-cpp/README.html
     title: ROCm llama.cpp blog
-  - url: https://rocm.docs.amd.com/en/latest/contribute/contributing.html
+  - url: https://github.com/ROCm/llama.cpp/blob/master/CONTRIBUTING.md
     title: Contribute to llama.cpp
   - file: about/license.rst
     title: License
