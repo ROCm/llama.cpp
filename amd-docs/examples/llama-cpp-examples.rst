@@ -14,7 +14,7 @@ framework.
 You can also search for llama.cpp examples on the `AMD ROCm blog <https://rocm.blogs.amd.com/>`_, 
 to find instructions to prepare your model and test the containers.
 
-Two most popular use-cases are:
+The two most popular use-cases are:
 
 * **llama-cli**: The main executable to run the model interactively or get a response to a prompt.
 * **llama-bench**: Run a benchmark of your model with different configurations.
@@ -77,7 +77,7 @@ Benchmark Application: ``llama-bench``
       -n 64,128,256 \
       -ngl 999
 
-2. The result of the command above should be similar to the following when running on a MI300X system:
+2. The result of the command above should be similar to the following when running on an AMD Instinct MI300X system:
 
    .. code-block::
 
