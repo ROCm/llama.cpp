@@ -62,13 +62,10 @@ To install llama.cpp on ROCm, you have the following options:
 - :ref:`Use the prebuilt Docker image <use-docker-with-llama-cpp-pre-installed>` **(recommended)**
 - :ref:`Build your own Docker image <build-llama-cpp-docker-image>`
 
-.. note::
-
-   Release ``b6652.amd0`` includes specific optimizations for AMD Instinct™ MI300X and ROCm 7.0.0. 
-   Refer to the `AMD ROCm blog <https://rocm.blogs.amd.com/>`__, to search for llama.cpp examples 
-   and best practices to optimize your workloads on AMD GPUs.
-
 .. _use-docker-with-llama-cpp-pre-installed:
+
+Use a prebuilt Docker image with llama.cpp pre-installed
+--------------------------------------------------------------------------------------
 
 Docker is the recommended method to set up a llama.cpp environment, and it avoids 
 potential installation issues. The tested, prebuilt image includes llama.cpp, ROCm, 
