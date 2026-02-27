@@ -322,6 +322,6 @@ To run unit tests manually and validate your installation fully, follow these st
       cd /workspace/llama.cpp
       ./build/bin/test-backend-ops
 
-.. note::
+   .. note::
 
-   Running unit tests requires at least one supported AMD GPU.
+      Running unit tests requires at least one supported AMD GPU.
