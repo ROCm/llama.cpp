@@ -60,7 +60,7 @@ Install llama.cpp
 To install llama.cpp on ROCm, you have the following options:
 
 - :ref:`Use the prebuilt Docker image <use-docker-with-llama-cpp-pre-installed>` **(recommended)**
-- :ref:`Build your own Docker image <build-your-llama-cpp-rocm-docker-image>`
+- :ref:`Build your own Docker image <build-llama-cpp-docker-image>`
 
 .. note::
 
