@@ -54,18 +54,18 @@ llama.cpp is commonly used in the following scenarios:
 - **Embedded and Resource-Constrained Environments:** Run compact models
   where memory and compute are limited.
 
-llama.cpp can also be used particularly when you need o meet one or more of the following requirements:
+llama.cpp can also be used particularly when you need to meet one or more of the following requirements:
 
-- Plain C/C++ implementation with no external dependencies for simple builds
+- **Plain C/C++ implementation** with no external dependencies for simple builds
   and portable deployment.
 
-- Support for 1.5-bit, 2-bit, 3-bit, 4-bit, 5-bit, 6-bit, and 8-bit integer
-  quantization enabling faster inference and reduced memory usage.
+- Support for 1.5-bit, 2-bit, 3-bit, 4-bit, 5-bit, 6-bit, and 8-bit **integer
+  quantization** enabling faster inference and reduced memory usage.
 
-- Custom `HIP <https://rocm.docs.amd.com/projects/HIP/en/latest/index.html>`__ kernels for
+- **Custom `HIP <https://rocm.docs.amd.com/projects/HIP/en/latest/index.html>`__ kernels** for
   running LLMs on AMD GPUs with ROCm to accelerate attention and related operations.
 
-- CPU and GPU hybrid inference to partially accelerate models larger than the
+- **CPU and GPU hybrid inference** to partially accelerate models larger than the
   total available VRAM by offloading selective computations to the GPU.
 
 llama.cpp is also used in a range of real-world applications, including:
@@ -87,10 +87,10 @@ Why llama.cpp?
 
 llama.cpp is well suited for practical LLM inference for the following reasons:
 
-- Its **lightweight design and quantization support** enable small memory
+- Its **lightweight design and quantization support** enables small memory
   footprints and fast startup.
 
-- **GPU offload via ROCm** provides additional throughput on AMD Instinct
+- **GPU offload with ROCm** provides additional throughput on AMD Instinct
   GPUs while maintaining portability.
 
 - **Simple tooling and interfaces** make it easy to integrate into apps,
