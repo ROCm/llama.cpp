@@ -285,4 +285,4 @@ To run unit tests manually and validate your installation fully, follow these st
 
    .. note::
 
-      Running unit tests requires at least one AMD GPU.
+      Running unit tests requires at least one supported AMD GPU.
