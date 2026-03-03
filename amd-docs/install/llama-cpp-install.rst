@@ -13,7 +13,7 @@ System requirements
 
 To use llama.cpp `b6652 <https://github.com/ROCm/llama.cpp/tree/release/b6652>`__, you need the following prerequisites:
 
-- **ROCm version:** `7.0.0 <https://repo.radeon.com/rocm/apt/7.0/>`__
+- **ROCm version:** `7.0.0 <https://rocm.docs.amd.com/en/docs-7.0.0/>`__
 - **Operating system:** Ubuntu 24.04, 22.04
 - **GPU platform:** AMD Instinct™ MI325X, MI300X, MI210
 
