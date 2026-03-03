@@ -180,7 +180,7 @@ validated for their respective ROCm version below.
                     `rocm/llama.cpp:llama.cpp-b6356_rocm7.0.0_ubuntu24.04_full <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6356_rocm7.0.0_ubuntu24.04_full/images/sha256-a2ecd635eaa65bb289a9041330128677f3ae88bee6fee0597424b17e38d4903c>`__
 
                   Inventory
-                    * `ROCm 7.0.0 <https://repo.radeon.com/rocm/apt/7.0/>`__
+                    * `ROCm 7.0.0 <https://rocm.docs.amd.com/en/docs-7.0.0/>`__
 
                .. tab-item:: Server Docker
 
@@ -188,7 +188,7 @@ validated for their respective ROCm version below.
                     `rocm/llama.cpp:llama.cpp-b6356_rocm7.0.0_ubuntu24.04_server <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6356_rocm7.0.0_ubuntu24.04_server/images/sha256-cb46b47df415addb5ceb6e6fdf0be70bf9d7f6863bbe6e10c2441ecb84246d52>`__
 
                   Inventory
-                    * `ROCm 7.0.0 <https://repo.radeon.com/rocm/apt/7.0/>`__
+                    * `ROCm 7.0.0 <https://rocm.docs.amd.com/en/docs-7.0.0/>`__
 
                .. tab-item:: Light Docker
 
@@ -196,7 +196,7 @@ validated for their respective ROCm version below.
                     `rocm/llama.cpp:llama.cpp-b6356_rocm7.0.0_ubuntu24.04_light <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6356_rocm7.0.0_ubuntu24.04_light/images/sha256-8f8536eec4b05c0ff1c022f9fc6c527ad1c89e6c1ca0906e4d39e4de73edbde9>`__
 
                   Inventory
-                    * `ROCm 7.0.0 <https://repo.radeon.com/rocm/apt/7.0/>`__
+                    * `ROCm 7.0.0 <https://rocm.docs.amd.com/en/docs-7.0.0/>`__
 
          .. tab-item:: Ubuntu 22.04
 
@@ -208,7 +208,7 @@ validated for their respective ROCm version below.
                     `rocm/llama.cpp:llama.cpp-b6356_rocm7.0.0_ubuntu22.04_full <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6356_rocm7.0.0_ubuntu22.04_full/images/sha256-f36de2a3b03ae53e81c85422cb3780368c9891e1ac7884b04403a921fe2ea45d>`__
 
                   Inventory
-                    * `ROCm 7.0.0 <https://repo.radeon.com/rocm/apt/7.0/>`__
+                    * `ROCm 7.0.0 <https://rocm.docs.amd.com/en/docs-7.0.0/>`__
 
                .. tab-item:: Server Docker
 
@@ -216,7 +216,7 @@ validated for their respective ROCm version below.
                     `rocm/llama.cpp:llama.cpp-b6356_rocm7.0.0_ubuntu22.04_server <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6356_rocm7.0.0_ubuntu22.04_server/images/sha256-df15e8ab11a6837cd3736644fec1e047465d49e37d610ab0b79df000371327df>`__
 
                   Inventory
-                    * `ROCm 7.0.0 <https://repo.radeon.com/rocm/apt/7.0/>`__
+                    * `ROCm 7.0.0 <https://rocm.docs.amd.com/en/docs-7.0.0/>`__
 
                .. tab-item:: Light Docker
 
@@ -224,7 +224,7 @@ validated for their respective ROCm version below.
                     `rocm/llama.cpp:llama.cpp-b6356_rocm7.0.0_ubuntu22.04_light <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6356_rocm7.0.0_ubuntu22.04_light/images/sha256-4ea2d5bb7964f0ee3ea9b30ba7f343edd6ddfab1b1037669ca7eafad2e3c2bd7>`__
 
                   Inventory
-                    * `ROCm 7.0.0 <https://repo.radeon.com/rocm/apt/7.0/>`__
+                    * `ROCm 7.0.0 <https://rocm.docs.amd.com/en/docs-7.0.0/>`__
 
    .. tab-item:: ROCm 6.4.3
 
@@ -240,7 +240,7 @@ validated for their respective ROCm version below.
                     `rocm/llama.cpp:llama.cpp-b6356_rocm6.4.3_ubuntu24.04_full <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6356_rocm6.4.3_ubuntu24.04_full/images/sha256-5960fc850024a8a76451f9eaadd89b7e59981ae9f393b407310c1ddf18892577>`__
 
                   Inventory
-                    * `ROCm 6.4.3 <https://repo.radeon.com/rocm/apt/6.4.3/>`__
+                    * `ROCm 6.4.3 <https://rocm.docs.amd.com/en/docs-6.4.3/>`__
 
                .. tab-item:: Server Docker
 
@@ -248,7 +248,7 @@ validated for their respective ROCm version below.
                     `rocm/llama.cpp:llama.cpp-b6356_rocm6.4.3_ubuntu24.04_server <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6356_rocm6.4.3_ubuntu24.04_server/images/sha256-1b79775d9f546065a6aaf9ca426e1dd4ed4de0b8f6ee83687758cc05af6538e6>`__
 
                   Inventory
-                    * `ROCm 6.4.3 <https://repo.radeon.com/rocm/apt/6.4.3/>`__
+                    * `ROCm 6.4.3 <https://rocm.docs.amd.com/en/docs-6.4.3/>`__
 
                .. tab-item:: Light Docker
 
@@ -256,7 +256,7 @@ validated for their respective ROCm version below.
                     `rocm/llama.cpp:llama.cpp-b6356_rocm6.4.3_ubuntu24.04_light <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6356_rocm6.4.3_ubuntu24.04_light/images/sha256-8f863c4c2857ae42bebd64e4f1a0a1e7cc3ec4503f243e32b4a4dcad070ec361>`__
 
                   Inventory
-                    * `ROCm 6.4.3 <https://repo.radeon.com/rocm/apt/6.4.3/>`__
+                    * `ROCm 6.4.3 <https://rocm.docs.amd.com/en/docs-6.4.3/>`__
 
          .. tab-item:: Ubuntu 22.04
 
@@ -268,7 +268,7 @@ validated for their respective ROCm version below.
                     `rocm/llama.cpp:llama.cpp-b6356_rocm6.4.3_ubuntu22.04_full <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6356_rocm6.4.3_ubuntu22.04_full/images/sha256-888879b3ee208f9247076d7984524b8d1701ac72611689e89854a1588bec9867>`__
 
                   Inventory
-                    * `ROCm 6.4.3 <https://repo.radeon.com/rocm/apt/6.4.3/>`__
+                    * `ROCm 6.4.3 <https://rocm.docs.amd.com/en/docs-6.4.3/>`__
 
                .. tab-item:: Server Docker
 
@@ -276,7 +276,7 @@ validated for their respective ROCm version below.
                     `rocm/llama.cpp:llama.cpp-b6356_rocm6.4.3_ubuntu22.04_server <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6356_rocm6.4.3_ubuntu22.04_server/images/sha256-90e4ff99a66743e33fd00728cd71a768588e5f5ef355aaa196669fe65ac70672>`__
 
                   Inventory
-                    * `ROCm 6.4.3 <https://repo.radeon.com/rocm/apt/6.4.3/>`__
+                    * `ROCm 6.4.3 <https://rocm.docs.amd.com/en/docs-6.4.3/>`__
 
                .. tab-item:: Light Docker
 
@@ -284,7 +284,7 @@ validated for their respective ROCm version below.
                     `rocm/llama.cpp:llama.cpp-b6356_rocm6.4.3_ubuntu22.04_light <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6356_rocm6.4.3_ubuntu22.04_light/images/sha256-bd447a049939cb99054f8fbf3f2352870fe906a75e2dc3339c845c08b9c53f9b>`__
 
                   Inventory
-                    * `ROCm 6.4.3 <https://repo.radeon.com/rocm/apt/6.4.3/>`__
+                    * `ROCm 6.4.3 <https://rocm.docs.amd.com/en/docs-6.4.3/>`__
 
    .. tab-item:: ROCm 6.4.2
 
@@ -300,7 +300,7 @@ validated for their respective ROCm version below.
                     `rocm/llama.cpp:llama.cpp-b6356_rocm6.4.2_ubuntu24.04_full <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6356_rocm6.4.2_ubuntu24.04_full/images/sha256-5b3a1bc4889c1fcade434b937fbf9cc1c22ff7dc0317c130339b0c9238bc88c4>`__
 
                   Inventory
-                    * `ROCm 6.4.2 <https://repo.radeon.com/rocm/apt/6.4.2/>`__
+                    * `ROCm 6.4.2 <https://rocm.docs.amd.com/en/docs-6.4.2/>`__
 
                .. tab-item:: Server Docker
 
@@ -308,7 +308,7 @@ validated for their respective ROCm version below.
                     `rocm/llama.cpp:llama.cpp-b6356_rocm6.4.2_ubuntu24.04_server <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6356_rocm6.4.2_ubuntu24.04_server/images/sha256-5228ff99d0f627a9032d668f4381b2e80dc1e301adc3e0821f26d8354b175271>`__
 
                   Inventory
-                    * `ROCm 6.4.2 <https://repo.radeon.com/rocm/apt/6.4.2/>`__
+                    * `ROCm 6.4.2 <https://rocm.docs.amd.com/en/docs-6.4.2/>`__
 
                .. tab-item:: Light Docker
 
@@ -316,7 +316,7 @@ validated for their respective ROCm version below.
                     `rocm/llama.cpp:llama.cpp-b6356_rocm6.4.2_ubuntu24.04_light <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6356_rocm6.4.2_ubuntu24.04_light/images/sha256-b12723b332a826a89b7252dddf868cbe4d1a869562fc4aa4032f59e1a683b968>`__
 
                   Inventory
-                    * `ROCm 6.4.2 <https://repo.radeon.com/rocm/apt/6.4.2/>`__
+                    * `ROCm 6.4.2 <https://rocm.docs.amd.com/en/docs-6.4.2/>`__
 
          .. tab-item:: Ubuntu 22.04
 
@@ -328,7 +328,7 @@ validated for their respective ROCm version below.
                     `rocm/llama.cpp:llama.cpp-b6356_rocm6.4.2_ubuntu22.04_full <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6356_rocm6.4.2_ubuntu22.04_full/images/sha256-cd6e21a6a73f59b35dd5309b09dd77654a94d783bf13a55c14eb8dbf8e9c2615>`__
 
                   Inventory
-                    * `ROCm 6.4.2 <https://repo.radeon.com/rocm/apt/6.4.2/>`__
+                    * `ROCm 6.4.2 <https://rocm.docs.amd.com/en/docs-6.4.2/>`__
 
                .. tab-item:: Server Docker
 
@@ -336,7 +336,7 @@ validated for their respective ROCm version below.
                     `rocm/llama.cpp:llama.cpp-b6356_rocm6.4.2_ubuntu22.04_server <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6356_rocm6.4.2_ubuntu22.04_server/images/sha256-c2b4689ab2c47e6626e8fea22d7a63eb03d47c0fde9f5ef8c9f158d15c423e58>`__
 
                   Inventory
-                    * `ROCm 6.4.2 <https://repo.radeon.com/rocm/apt/6.4.2/>`__
+                    * `ROCm 6.4.2 <https://rocm.docs.amd.com/en/docs-6.4.2/>`__
 
                .. tab-item:: Light Docker
 
@@ -344,7 +344,7 @@ validated for their respective ROCm version below.
                     `rocm/llama.cpp:llama.cpp-b6356_rocm6.4.2_ubuntu22.04_light <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6356_rocm6.4.2_ubuntu22.04_light/images/sha256-1acc28f29ed87db9cbda629cb29e1989b8219884afe05f9105522be929e94da4>`__
 
                   Inventory
-                    * `ROCm 6.4.2 <https://repo.radeon.com/rocm/apt/6.4.2/>`__
+                    * `ROCm 6.4.2 <https://rocm.docs.amd.com/en/docs-6.4.2/>`__
 
    .. tab-item:: ROCm 6.4.1
 
@@ -360,7 +360,7 @@ validated for their respective ROCm version below.
                     `rocm/llama.cpp:llama.cpp-b6356_rocm6.4.1_ubuntu24.04_full <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6356_rocm6.4.1_ubuntu24.04_full/images/sha256-2f8ae8a44510d96d52dea6cb398b224f7edeb7802df7ec488c6f63d206b3cdc9>`__
 
                   Inventory
-                    * `ROCm 6.4.1 <https://repo.radeon.com/rocm/apt/6.4.1/>`__
+                    * `ROCm 6.4.1 <https://rocm.docs.amd.com/en/docs-6.4.1/>`__
 
                .. tab-item:: Server Docker
 
@@ -368,7 +368,7 @@ validated for their respective ROCm version below.
                     `rocm/llama.cpp:llama.cpp-b6356_rocm6.4.1_ubuntu24.04_server <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6356_rocm6.4.1_ubuntu24.04_server/images/sha256-fece497ff9f4a28b12f645de52766941da8ead8471aa1ea84b61d4b4568e51f2>`__
 
                   Inventory
-                    * `ROCm 6.4.1 <https://repo.radeon.com/rocm/apt/6.4.1/>`__
+                    * `ROCm 6.4.1 <https://rocm.docs.amd.com/en/docs-6.4.1/>`__
 
                .. tab-item:: Light Docker
 
@@ -376,7 +376,7 @@ validated for their respective ROCm version below.
                     `rocm/llama.cpp:llama.cpp-b6356_rocm6.4.1_ubuntu24.04_light <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6356_rocm6.4.1_ubuntu24.04_light/images/sha256-3e14352fa6f8c6128b23cf9342531c20dbfb522550b626e09d83b260a1947022>`__
 
                   Inventory
-                    * `ROCm 6.4.1 <https://repo.radeon.com/rocm/apt/6.4.1/>`__
+                    * `ROCm 6.4.1 <https://rocm.docs.amd.com/en/docs-6.4.1/>`__
 
          .. tab-item:: Ubuntu 22.04
 
@@ -388,7 +388,7 @@ validated for their respective ROCm version below.
                     `rocm/llama.cpp:llama.cpp-b6356_rocm6.4.1_ubuntu22.04_full <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6356_rocm6.4.1_ubuntu22.04_full/images/sha256-80763062ef0bec15038c35fd01267f1fc99a5dd171d4b48583cc668b15efad69>`__
 
                   Inventory
-                    * `ROCm 6.4.1 <https://repo.radeon.com/rocm/apt/6.4.1/>`__
+                    * `ROCm 6.4.1 <https://rocm.docs.amd.com/en/docs-6.4.1/>`__
 
                .. tab-item:: Server Docker
 
@@ -396,7 +396,7 @@ validated for their respective ROCm version below.
                     `rocm/llama.cpp:llama.cpp-b6356_rocm6.4.1_ubuntu22.04_server <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6356_rocm6.4.1_ubuntu22.04_server/images/sha256-db2a6c957555ed83b819bbc54aea884a93192da0fb512dae63d32e0dc4e8ab8f>`__
 
                   Inventory
-                    * `ROCm 6.4.1 <https://repo.radeon.com/rocm/apt/6.4.1/>`__
+                    * `ROCm 6.4.1 <https://rocm.docs.amd.com/en/docs-6.4.1/>`__
 
                .. tab-item:: Light Docker
 
@@ -404,7 +404,7 @@ validated for their respective ROCm version below.
                     `rocm/llama.cpp:llama.cpp-b6356_rocm6.4.1_ubuntu22.04_light <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6356_rocm6.4.1_ubuntu22.04_light/images/sha256-c6dbb07cc655fb079d5216e4b77451cb64a9daa0585d23b6fb8b32cb22021197>`__
 
                   Inventory
-                    * `ROCm 6.4.1 <https://repo.radeon.com/rocm/apt/6.4.1/>`__
+                    * `ROCm 6.4.1 <https://rocm.docs.amd.com/en/docs-6.4.1/>`__
 
 
 .. _build-your-llama-cpp-rocm-docker-image:
