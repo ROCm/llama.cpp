@@ -13,7 +13,7 @@ System requirements
 
 To use llama.cpp `b5997 <https://github.com/ROCm/llama.cpp/tree/release/b5997>`__, you need the following prerequisites:
 
-- **ROCm version:** `6.4.0 <https://repo.radeon.com/rocm/apt/6.4/>`__
+- **ROCm version:** `6.4.0 <https://rocm.docs.amd.com/en/docs-6.4.0/>`__
 - **Operating system:** Ubuntu 24.04
 - **GPU platform:** AMD Instinct™ MI300X, MI210
 
@@ -153,7 +153,7 @@ Docker image support
 
 AMD validates and publishes ready-made `llama.cpp <https://hub.docker.com/r/rocm/llama.cpp>`_ images
 with ROCm backends on Docker Hub. The following Docker image tags and associated inventories are
-validated for `ROCm 6.4.0 <https://repo.radeon.com/rocm/apt/6.4/>`_.
+validated for `ROCm 6.4.0 <https://rocm.docs.amd.com/en/docs-6.4.0/>`_.
 
 .. tab-set::
 
@@ -167,7 +167,7 @@ validated for `ROCm 6.4.0 <https://repo.radeon.com/rocm/apt/6.4/>`_.
               `rocm/llama.cpp:llama.cpp-b5997_rocm6.4.0_ubuntu24.04_full <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b5997_rocm6.4.0_ubuntu24.04_full/images/sha256-f78f6c81ab2f8e957469415fe2370a1334fe969c381d1fe46050c85effaee9d5>`__
 
             Inventory
-              * `ROCm 6.4.0 <https://repo.radeon.com/rocm/apt/6.4/>`_
+              * `ROCm 6.4.0 <https://rocm.docs.amd.com/en/docs-6.4.0/>`_
 
    .. tab-item:: Server Docker
 
@@ -179,7 +179,7 @@ validated for `ROCm 6.4.0 <https://repo.radeon.com/rocm/apt/6.4/>`_.
               `rocm/llama.cpp:llama.cpp-b5997_rocm6.4.0_ubuntu24.04_server <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b5997_rocm6.4.0_ubuntu24.04_server/images/sha256-275ad9e18f292c26a00a2de840c37917e98737a88a3520bdc35fd3fc5c9a6a9b>`__
 
             Inventory
-              * `ROCm 6.4.0 <https://repo.radeon.com/rocm/apt/6.4/>`_
+              * `ROCm 6.4.0 <https://rocm.docs.amd.com/en/docs-6.4.0/>`_
 
    .. tab-item:: Light Docker
 
@@ -191,7 +191,7 @@ validated for `ROCm 6.4.0 <https://repo.radeon.com/rocm/apt/6.4/>`_.
               `rocm/llama.cpp:llama.cpp-b5997_rocm6.4.0_ubuntu24.04_light <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b5997_rocm6.4.0_ubuntu24.04_light/images/sha256-cc324e6faeedf0e400011f07b49d2dc41a16bae257b2b7befa0f4e2e97231320>`__
 
             Inventory
-              * `ROCm 6.4.0 <https://repo.radeon.com/rocm/apt/6.4/>`_
+              * `ROCm 6.4.0 <https://rocm.docs.amd.com/en/docs-6.4.0/>`_
 
 .. _build-your-llama-cpp-rocm-docker-image:
 
