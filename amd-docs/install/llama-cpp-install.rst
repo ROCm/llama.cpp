@@ -172,7 +172,7 @@ are validated for `ROCm 7.0.0 <https://rocm.docs.amd.com/en/docs-7.0.0/>`__.
               `rocm/llama.cpp:llama.cpp-b6652.amd0_rocm7.0.0_ubuntu24.04_full <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6652.amd0_rocm7.0.0_ubuntu24.04_full/images/sha256-a94f0c7a598cc6504ff9e8371c016d7a2f93e69bf54a36c870f9522567201f10>`__
 
             Inventory
-              * `ROCm 7.0.0 <https://repo.radeon.com/rocm/apt/7.0/>`__
+              * `ROCm 7.0.0 <https://rocm.docs.amd.com/en/docs-7.0.0/>`__
 
          .. tab-item:: Server Docker
 
@@ -180,7 +180,7 @@ are validated for `ROCm 7.0.0 <https://rocm.docs.amd.com/en/docs-7.0.0/>`__.
               `rocm/llama.cpp:llama.cpp-b6652.amd0_rocm7.0.0_ubuntu24.04_server <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6652.amd0_rocm7.0.0_ubuntu24.04_server/images/sha256-be175932c3c96e882dfbc7e20e0e834f58c89c2925f48b222837ee929dfc47ee>`__
 
             Inventory
-              * `ROCm 7.0.0 <https://repo.radeon.com/rocm/apt/7.0/>`__
+              * `ROCm 7.0.0 <https://rocm.docs.amd.com/en/docs-7.0.0/>`__
 
          .. tab-item:: Light Docker
 
@@ -188,7 +188,7 @@ are validated for `ROCm 7.0.0 <https://rocm.docs.amd.com/en/docs-7.0.0/>`__.
               `rocm/llama.cpp:llama.cpp-b6652.amd0_rocm7.0.0_ubuntu24.04_light <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6652.amd0_rocm7.0.0_ubuntu24.04_light/images/sha256-d8ba0c70603da502c879b1f8010b439c8e7fa9f6cbdac8bbbbbba97cb41ebc9e>`__
 
             Inventory
-              * `ROCm 7.0.0 <https://repo.radeon.com/rocm/apt/7.0/>`__
+              * `ROCm 7.0.0 <https://rocm.docs.amd.com/en/docs-7.0.0/>`__
 
    .. tab-item:: ROCm 7.0.0 - Ubuntu 22.04
 
@@ -200,7 +200,7 @@ are validated for `ROCm 7.0.0 <https://rocm.docs.amd.com/en/docs-7.0.0/>`__.
               `rocm/llama.cpp:llama.cpp-b6652.amd0_rocm7.0.0_ubuntu22.04_full <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6652.amd0_rocm7.0.0_ubuntu22.04_full/images/sha256-37582168984f25dce636cc7288298e06d94472ea35f65346b3541e6422b678ee>`__
 
             Inventory
-              * `ROCm 7.0.0 <https://repo.radeon.com/rocm/apt/7.0/>`__
+              * `ROCm 7.0.0 <https://rocm.docs.amd.com/en/docs-7.0.0/>`__
 
          .. tab-item:: Server Docker
 
@@ -208,7 +208,7 @@ are validated for `ROCm 7.0.0 <https://rocm.docs.amd.com/en/docs-7.0.0/>`__.
               `rocm/llama.cpp:llama.cpp-b6652.amd0_rocm7.0.0_ubuntu22.04_server <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6652.amd0_rocm7.0.0_ubuntu22.04_server/images/sha256-7e70578e6c3530c6591cc2c26da24a9ee68a20d318e12241de93c83224f83720>`__
 
             Inventory
-              * `ROCm 7.0.0 <https://repo.radeon.com/rocm/apt/7.0/>`__
+              * `ROCm 7.0.0 <https://rocm.docs.amd.com/en/docs-7.0.0/>`__
 
          .. tab-item:: Light Docker
 
@@ -216,7 +216,7 @@ are validated for `ROCm 7.0.0 <https://rocm.docs.amd.com/en/docs-7.0.0/>`__.
               `rocm/llama.cpp:llama.cpp-b6652.amd0_rocm7.0.0_ubuntu22.04_light <https://hub.docker.com/layers/rocm/llama.cpp/llama.cpp-b6652.amd0_rocm7.0.0_ubuntu22.04_light/images/sha256-9a5231acf88b4a229677bc2c636ea3fe78a7a80f558bd80910b919855de93ad5>`__
 
             Inventory
-              * `ROCm 7.0.0 <https://repo.radeon.com/rocm/apt/7.0/>`__
+              * `ROCm 7.0.0 <https://rocm.docs.amd.com/en/docs-7.0.0/>`__
 
 
 .. _build-llama-cpp-docker-image:
