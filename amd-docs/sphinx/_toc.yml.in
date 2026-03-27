@@ -1,0 +1,32 @@
+defaults:
+  numbered: False
+  maxdepth: 6
+root: index
+subtrees:
+- entries:
+  - file: what-is-llama-cpp.rst
+    title: What is llama.cpp?
+
+- caption: Install
+  entries:
+  - file: install/llama-cpp-install.rst
+    title: Install llama.cpp
+
+- caption: Examples
+  entries:
+  - file: examples/llama-cpp-examples.rst
+    title: Run a llama.cpp example
+
+- caption: Reference
+  entries:
+  - url: https://llama-cpp-python.readthedocs.io/en/latest/api-reference/
+    title: API reference (upstream)
+
+- caption: About
+  entries:
+  - url: https://rocm.blogs.amd.com/artificial-intelligence/coding-agent/README.html
+    title: ROCm llama.cpp blog
+  - url: https://github.com/ROCm/llama.cpp/blob/master/CONTRIBUTING.md
+    title: Contribute to llama.cpp
+  - file: about/license.rst
+    title: License
