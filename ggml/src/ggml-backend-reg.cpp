@@ -46,6 +46,10 @@
 #include "ggml-vulkan.h"
 #endif
 
+#ifdef GGML_USE_HRX
+#include "ggml-hrx.h"
+#endif
+
 #ifdef GGML_USE_WEBGPU
 #include "ggml-webgpu.h"
 #endif
@@ -129,6 +133,9 @@ struct ggml_backend_registry {
     } else {
         GGML_LOG_DEBUG("Vulkan backend disabled by GGML_DISABLE_VULKAN environment variable\n");
     }
+#endif
+#ifdef GGML_USE_HRX
+        register_backend(ggml_backend_hrx_reg());
 #endif
 #ifdef GGML_USE_WEBGPU
         register_backend(ggml_backend_webgpu_reg());
