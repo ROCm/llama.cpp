@@ -1712,6 +1712,243 @@ private:
     std::string old_value;
 };
 
+static std::vector<float> reference_rms_norm_mul(
+        const std::vector<float> & src,
+        const std::vector<float> & weight,
+        int64_t ncols,
+        int64_t ne1,
+        int64_t ne2,
+        int64_t weight_ne1,
+        int64_t weight_ne2,
+        float eps) {
+    std::vector<float> expected(src.size());
+    for (int64_t i2 = 0; i2 < ne2; ++i2) {
+        const int64_t wi2 = weight_ne2 == 1 ? 0 : i2;
+        for (int64_t i1 = 0; i1 < ne1; ++i1) {
+            const int64_t wi1 = weight_ne1 == 1 ? 0 : i1;
+            const int64_t row = i1 + ne1 * i2;
+            float sum = 0.0f;
+            for (int64_t col = 0; col < ncols; ++col) {
+                const float value = src[static_cast<size_t>(row * ncols + col)];
+                sum += value * value;
+            }
+            const float scale = 1.0f / std::sqrt(sum / static_cast<float>(ncols) + eps);
+            for (int64_t col = 0; col < ncols; ++col) {
+                const float w = weight[static_cast<size_t>(col + ncols * (wi1 + weight_ne1 * wi2))];
+                expected[static_cast<size_t>(row * ncols + col)] =
+                    src[static_cast<size_t>(row * ncols + col)] * scale * w;
+            }
+        }
+    }
+    return expected;
+}
+
+static void apply_imrope_reference(
+        std::vector<float> & data,
+        const std::vector<int32_t> & pos,
+        const int sections[GGML_MROPE_SECTIONS],
+        int64_t ncols,
+        int64_t ne1,
+        int64_t ne2,
+        float freq_base,
+        float freq_scale,
+        float attn_factor) {
+    const int32_t sect_dims = sections[0] + sections[1] + sections[2] + sections[3];
+    const float theta_scale = std::pow(freq_base, -2.0f / static_cast<float>(ncols));
+    for (int64_t i2 = 0; i2 < ne2; ++i2) {
+        for (int64_t i1 = 0; i1 < ne1; ++i1) {
+            const int64_t row_base = (i2 * ne1 + i1) * ncols;
+            for (int64_t pair = 0; pair < ncols / 2; ++pair) {
+                const int32_t i0 = static_cast<int32_t>(2 * pair);
+                const int32_t sector = (i0 / 2) % sect_dims;
+                const int32_t pos_idx =
+                    (sector % 3 == 1 && sector < 3 * sections[1]) ? 1 :
+                    (sector % 3 == 2 && sector < 3 * sections[2]) ? 2 :
+                    (sector % 3 == 0 && sector < 3 * sections[0]) ? 0 : 3;
+                const float theta = static_cast<float>(pos[static_cast<size_t>(i2 + ne2 * pos_idx)]) *
+                    std::pow(theta_scale, static_cast<float>(i0) / 2.0f) * freq_scale;
+                const float cos_theta = std::cos(theta) * attn_factor;
+                const float sin_theta = std::sin(theta) * attn_factor;
+                const int64_t off0 = i0 / 2;
+                const int64_t off1 = off0 + ncols / 2;
+                const float x0 = data[static_cast<size_t>(row_base + off0)];
+                const float x1 = data[static_cast<size_t>(row_base + off1)];
+                data[static_cast<size_t>(row_base + off0)] = x0 * cos_theta - x1 * sin_theta;
+                data[static_cast<size_t>(row_base + off1)] = x0 * sin_theta + x1 * cos_theta;
+            }
+        }
+    }
+}
+
+static void fill_rms_rope_inputs(
+        ggml_tensor * src,
+        ggml_tensor * weight,
+        ggml_tensor * pos,
+        int64_t weight_ne1,
+        int64_t weight_ne2,
+        std::vector<float> * src_data,
+        std::vector<float> * weight_data,
+        std::vector<int32_t> * pos_data) {
+    src_data->resize(static_cast<size_t>(ggml_nelements(src)));
+    weight_data->resize(static_cast<size_t>(ggml_nelements(weight)));
+    pos_data->resize(static_cast<size_t>(ggml_nelements(pos)));
+    for (size_t i = 0; i < src_data->size(); ++i) {
+        (*src_data)[i] = static_cast<float>(static_cast<int>((i * 17 + 11) % 47) - 23) / 41.0f;
+    }
+    for (int64_t i2 = 0; i2 < weight_ne2; ++i2) {
+        for (int64_t i1 = 0; i1 < weight_ne1; ++i1) {
+            for (int64_t i0 = 0; i0 < weight->ne[0]; ++i0) {
+                const size_t idx = static_cast<size_t>(i0 + weight->ne[0] * (i1 + weight_ne1 * i2));
+                (*weight_data)[idx] = 0.5f + static_cast<float>((i0 + 3 * i1 + 5 * i2) % 13) * 0.0625f;
+            }
+        }
+    }
+    for (size_t i = 0; i < pos_data->size(); ++i) {
+        (*pos_data)[i] = static_cast<int32_t>((i * 5 + 3) % 19);
+    }
+
+    ggml_backend_tensor_set(src, src_data->data(), 0, src_data->size() * sizeof(float));
+    ggml_backend_tensor_set(weight, weight_data->data(), 0, weight_data->size() * sizeof(float));
+    ggml_backend_tensor_set(pos, pos_data->data(), 0, pos_data->size() * sizeof(int32_t));
+}
+
+static void run_rms_norm_mul_fusion_case(
+        ggml_backend_t backend,
+        int64_t ncols,
+        int64_t ne1,
+        int64_t ne2,
+        int64_t weight_ne1,
+        int64_t weight_ne2,
+        const char * label) {
+    static constexpr float eps = 1.0e-6f;
+    ggml_context_ptr ctx = make_context();
+    ggml_tensor * src = ggml_new_tensor_3d(ctx.get(), GGML_TYPE_F32, ncols, ne1, ne2);
+    ggml_tensor * weight = ggml_new_tensor_3d(ctx.get(), GGML_TYPE_F32, ncols, weight_ne1, weight_ne2);
+    ggml_tensor * dummy_pos = ggml_new_tensor_1d(ctx.get(), GGML_TYPE_I32, 1);
+    ggml_tensor * rms = ggml_rms_norm(ctx.get(), src, eps);
+    ggml_tensor * out = ggml_mul(ctx.get(), rms, weight);
+
+    ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 16, false);
+    ggml_build_forward_expand(graph, out);
+    ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
+    GGML_ASSERT(buffer != nullptr);
+
+    std::vector<float> src_data;
+    std::vector<float> weight_data;
+    std::vector<int32_t> pos_data;
+    fill_rms_rope_inputs(src, weight, dummy_pos, weight_ne1, weight_ne2, &src_data, &weight_data, &pos_data);
+
+    scoped_env_var disable_mul("GGML_HRX_DISABLE_MUL", "1");
+    GGML_ASSERT(ggml_backend_graph_compute(backend, graph) == GGML_STATUS_SUCCESS);
+    const std::vector<float> expected =
+        reference_rms_norm_mul(src_data, weight_data, ncols, ne1, ne2, weight_ne1, weight_ne2, eps);
+    expect_near(tensor_to_float(out), expected, 3.0e-5f, label);
+}
+
+static void run_rms_norm_mul_rope_fusion_case(ggml_backend_t backend, const char * label) {
+    static constexpr int64_t NCOLS = 128;
+    static constexpr int64_t NE1 = 3;
+    static constexpr int64_t NE2 = 2;
+    static constexpr float EPS = 1.0e-6f;
+    static constexpr float FREQ_BASE = 10000.0f;
+    static constexpr float FREQ_SCALE = 1.0f;
+    static constexpr float ATTN_FACTOR = 1.0f;
+    int sections[GGML_MROPE_SECTIONS] = { 32, 32, 32, 32 };
+
+    ggml_context_ptr ctx = make_context();
+    ggml_tensor * src = ggml_new_tensor_3d(ctx.get(), GGML_TYPE_F32, NCOLS, NE1, NE2);
+    ggml_tensor * weight = ggml_new_tensor_1d(ctx.get(), GGML_TYPE_F32, NCOLS);
+    ggml_tensor * pos = ggml_new_tensor_1d(ctx.get(), GGML_TYPE_I32, NE2 * 4);
+    ggml_tensor * rms = ggml_rms_norm(ctx.get(), src, EPS);
+    ggml_tensor * mul = ggml_mul(ctx.get(), rms, weight);
+    ggml_tensor * out = ggml_rope_multi(
+        ctx.get(), mul, pos, nullptr, static_cast<int>(NCOLS), sections, GGML_ROPE_TYPE_IMROPE, 0,
+        FREQ_BASE, FREQ_SCALE, 0.0f, ATTN_FACTOR, 1.0f, 1.0f);
+
+    ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 16, false);
+    ggml_build_forward_expand(graph, out);
+    ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
+    GGML_ASSERT(buffer != nullptr);
+
+    std::vector<float> src_data;
+    std::vector<float> weight_data;
+    std::vector<int32_t> pos_data;
+    fill_rms_rope_inputs(src, weight, pos, 1, 1, &src_data, &weight_data, &pos_data);
+
+    scoped_env_var disable_mul("GGML_HRX_DISABLE_MUL", "1");
+    scoped_env_var disable_rope("GGML_HRX_DISABLE_ROPE", "1");
+    GGML_ASSERT(ggml_backend_graph_compute(backend, graph) == GGML_STATUS_SUCCESS);
+    std::vector<float> expected = reference_rms_norm_mul(src_data, weight_data, NCOLS, NE1, NE2, 1, 1, EPS);
+    apply_imrope_reference(expected, pos_data, sections, NCOLS, NE1, NE2, FREQ_BASE, FREQ_SCALE, ATTN_FACTOR);
+    expect_near(tensor_to_float(out), expected, 5.0e-5f, label);
+}
+
+static void run_rope_set_rows_fusion_case(ggml_backend_t backend, bool with_rms_mul, const char * label) {
+    static constexpr int64_t NCOLS = 64;
+    static constexpr int64_t NE1 = 2;
+    static constexpr int64_t NE2 = 3;
+    static constexpr int64_t DST_ROWS = 4;
+    static constexpr float EPS = 1.0e-6f;
+    static constexpr float FREQ_BASE = 10000.0f;
+    static constexpr float FREQ_SCALE = 1.0f;
+    static constexpr float ATTN_FACTOR = 1.0f;
+    int sections[GGML_MROPE_SECTIONS] = { 16, 16, 16, 16 };
+
+    ggml_context_ptr ctx = make_context();
+    ggml_tensor * src = ggml_new_tensor_3d(ctx.get(), GGML_TYPE_F32, NCOLS, NE1, NE2);
+    ggml_tensor * weight = ggml_new_tensor_1d(ctx.get(), GGML_TYPE_F32, NCOLS);
+    ggml_tensor * pos = ggml_new_tensor_1d(ctx.get(), GGML_TYPE_I32, NE2 * 4);
+    ggml_tensor * rope_src = src;
+    if (with_rms_mul) {
+        ggml_tensor * rms = ggml_rms_norm(ctx.get(), src, EPS);
+        rope_src = ggml_mul(ctx.get(), rms, weight);
+    }
+    ggml_tensor * rope = ggml_rope_multi(
+        ctx.get(), rope_src, pos, nullptr, static_cast<int>(NCOLS), sections, GGML_ROPE_TYPE_IMROPE, 0,
+        FREQ_BASE, FREQ_SCALE, 0.0f, ATTN_FACTOR, 1.0f, 1.0f);
+    ggml_tensor * view = ggml_view_2d(ctx.get(), rope, NCOLS * NE1, NE2, rope->nb[2], 0);
+    ggml_tensor * rows = ggml_new_tensor_1d(ctx.get(), GGML_TYPE_I64, NE2);
+    ggml_tensor * dst = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F16, NCOLS * NE1, DST_ROWS);
+    ggml_tensor * out = ggml_set_rows(ctx.get(), dst, view, rows);
+
+    ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 32, false);
+    ggml_build_forward_expand(graph, out);
+    ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
+    GGML_ASSERT(buffer != nullptr);
+
+    std::vector<float> src_data;
+    std::vector<float> weight_data;
+    std::vector<int32_t> pos_data;
+    fill_rms_rope_inputs(src, weight, pos, 1, 1, &src_data, &weight_data, &pos_data);
+    const int64_t row_data[NE2] = { 2, -1, 0 };
+    std::vector<uint8_t> dst_zero(ggml_nbytes(dst), 0);
+    ggml_backend_tensor_set(rows, row_data, 0, sizeof(row_data));
+    ggml_backend_tensor_set(dst, dst_zero.data(), 0, dst_zero.size());
+
+    scoped_env_var disable_rope("GGML_HRX_DISABLE_ROPE", "1");
+    scoped_env_var disable_set_rows("GGML_HRX_DISABLE_SET_ROWS", "1");
+    scoped_env_var disable_mul("GGML_HRX_DISABLE_MUL", with_rms_mul ? "1" : "0");
+    GGML_ASSERT(ggml_backend_graph_compute(backend, graph) == GGML_STATUS_SUCCESS);
+
+    std::vector<float> rope_expected = with_rms_mul ?
+        reference_rms_norm_mul(src_data, weight_data, NCOLS, NE1, NE2, 1, 1, EPS) :
+        src_data;
+    apply_imrope_reference(rope_expected, pos_data, sections, NCOLS, NE1, NE2, FREQ_BASE, FREQ_SCALE, ATTN_FACTOR);
+    std::vector<float> expected(static_cast<size_t>(NCOLS * NE1 * DST_ROWS), 0.0f);
+    for (int64_t token = 0; token < NE2; ++token) {
+        const int64_t dst_row = row_data[token];
+        if (dst_row < 0 || dst_row >= DST_ROWS) {
+            continue;
+        }
+        for (int64_t col = 0; col < NCOLS * NE1; ++col) {
+            const float value = rope_expected[static_cast<size_t>(token * NCOLS * NE1 + col)];
+            expected[static_cast<size_t>(dst_row * NCOLS * NE1 + col)] =
+                ggml_fp16_to_fp32(ggml_fp32_to_fp16(value));
+        }
+    }
+    expect_near(tensor_to_float(out), expected, 1.0e-3f, label);
+}
+
 static void run_mul_mat_id_q4_k_mul_fusion_case(
         ggml_backend_t backend,
         const char * label,
@@ -2832,6 +3069,11 @@ int main() {
         run_rms_norm_case(backend.get(), 128, 3, 2);
         run_rms_norm_case(backend.get(), 129, 3, 2);
         run_rms_norm_case(backend.get(), 513, 2, 2);
+        run_rms_norm_mul_fusion_case(backend.get(), 64, 3, 2, 1, 1, "rms_norm_mul_fusion_broadcast");
+        run_rms_norm_mul_fusion_case(backend.get(), 257, 2, 2, 2, 1, "rms_norm_mul_fusion_rows");
+        run_rms_norm_mul_rope_fusion_case(backend.get(), "rms_norm_mul_rope_fusion");
+        run_rope_set_rows_fusion_case(backend.get(), false, "rope_set_rows_fusion");
+        run_rope_set_rows_fusion_case(backend.get(), true, "rms_norm_mul_rope_set_rows_fusion");
         run_sum_rows_case(backend.get(), 1, 3, 2);
         run_sum_rows_case(backend.get(), 255, 3, 2);
         run_sum_rows_case(backend.get(), 256, 3, 2);
