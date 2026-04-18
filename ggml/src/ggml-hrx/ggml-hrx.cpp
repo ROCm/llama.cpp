@@ -255,6 +255,16 @@ struct ggml_backend_hrx_mul_mat_vec_constants {
 
 static_assert(sizeof(ggml_backend_hrx_mul_mat_vec_constants) == 24);
 
+struct ggml_backend_hrx_mul_mat_vec_bf16_set_rows_constants {
+    int64_t k;
+    int64_t rows;
+    int64_t set_rows_ne1;
+    int64_t idx_nb0;
+    int64_t dst_nb1;
+};
+
+static_assert(sizeof(ggml_backend_hrx_mul_mat_vec_bf16_set_rows_constants) == 40);
+
 struct ggml_backend_hrx_quantize_q8_1_constants {
     int64_t ne00;
     int64_t s01;
@@ -674,10 +684,44 @@ struct ggml_backend_hrx_device_context {
     ggml_backend_hrx_op_provider get_rows_f32_nr1_provider;
     ggml_backend_hrx_op_provider get_rows_q5_k_provider;
     ggml_backend_hrx_op_provider mul_mat_vec_bf16_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_wg128_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_wg64_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_cols1_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_rows2_cols1_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_rows2_cols1_wg32_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_rows4_k512_cols1_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_rows4_k2048_cols1_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_cols4_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_cols8_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_cols16_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_cols32_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_rows2_cols16_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_wmma16_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_swiglu_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_swiglu_wg128_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_swiglu_wg64_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_swiglu_cols1_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_swiglu_rows2_cols1_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_swiglu_rows4_k2048_cols1_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_swiglu_cols4_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_swiglu_cols8_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_swiglu_cols16_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_swiglu_rows2_cols8_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_swiglu_wmma16_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_set_rows_f16_provider;
     ggml_backend_hrx_op_provider mul_mat_vec_f16_provider;
     ggml_backend_hrx_op_provider mul_mat_vec_f16_batched_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_f16_batched_cols1_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_f16_batched_cols4_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_f16_batched_cols8_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_f16_batched_cols16_provider;
     ggml_backend_hrx_op_provider mul_mat_vec_f32_provider;
     ggml_backend_hrx_op_provider mul_mat_vec_f32_batched_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_f32_batched_cols1_ne2_1_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_f32_batched_cols1_ne2_1_k2048_wg32_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_f32_batched_cols8_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_f32_batched_cols16_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_f32_batched_rows2_cols8_provider;
     ggml_backend_hrx_op_provider mul_mat_id_q4_k_provider;
     ggml_backend_hrx_op_provider mul_mat_id_q4_k_row4_wg64_provider;
     ggml_backend_hrx_op_provider mul_mat_id_q4_k_wg64_provider;
@@ -765,10 +809,44 @@ static void ggml_backend_hrx_reset_providers(ggml_backend_hrx_device_context * d
     device_context->get_rows_f32_nr1_provider.reset();
     device_context->get_rows_q5_k_provider.reset();
     device_context->mul_mat_vec_bf16_provider.reset();
+    device_context->mul_mat_vec_bf16_wg128_provider.reset();
+    device_context->mul_mat_vec_bf16_wg64_provider.reset();
+    device_context->mul_mat_vec_bf16_cols1_provider.reset();
+    device_context->mul_mat_vec_bf16_rows2_cols1_provider.reset();
+    device_context->mul_mat_vec_bf16_rows2_cols1_wg32_provider.reset();
+    device_context->mul_mat_vec_bf16_rows4_k512_cols1_provider.reset();
+    device_context->mul_mat_vec_bf16_rows4_k2048_cols1_provider.reset();
+    device_context->mul_mat_vec_bf16_cols4_provider.reset();
+    device_context->mul_mat_vec_bf16_cols8_provider.reset();
+    device_context->mul_mat_vec_bf16_cols16_provider.reset();
+    device_context->mul_mat_vec_bf16_cols32_provider.reset();
+    device_context->mul_mat_vec_bf16_rows2_cols16_provider.reset();
+    device_context->mul_mat_vec_bf16_wmma16_provider.reset();
+    device_context->mul_mat_vec_bf16_swiglu_provider.reset();
+    device_context->mul_mat_vec_bf16_swiglu_wg128_provider.reset();
+    device_context->mul_mat_vec_bf16_swiglu_wg64_provider.reset();
+    device_context->mul_mat_vec_bf16_swiglu_cols1_provider.reset();
+    device_context->mul_mat_vec_bf16_swiglu_rows2_cols1_provider.reset();
+    device_context->mul_mat_vec_bf16_swiglu_rows4_k2048_cols1_provider.reset();
+    device_context->mul_mat_vec_bf16_swiglu_cols4_provider.reset();
+    device_context->mul_mat_vec_bf16_swiglu_cols8_provider.reset();
+    device_context->mul_mat_vec_bf16_swiglu_cols16_provider.reset();
+    device_context->mul_mat_vec_bf16_swiglu_rows2_cols8_provider.reset();
+    device_context->mul_mat_vec_bf16_swiglu_wmma16_provider.reset();
+    device_context->mul_mat_vec_bf16_set_rows_f16_provider.reset();
     device_context->mul_mat_vec_f16_provider.reset();
     device_context->mul_mat_vec_f16_batched_provider.reset();
+    device_context->mul_mat_vec_f16_batched_cols1_provider.reset();
+    device_context->mul_mat_vec_f16_batched_cols4_provider.reset();
+    device_context->mul_mat_vec_f16_batched_cols8_provider.reset();
+    device_context->mul_mat_vec_f16_batched_cols16_provider.reset();
     device_context->mul_mat_vec_f32_provider.reset();
     device_context->mul_mat_vec_f32_batched_provider.reset();
+    device_context->mul_mat_vec_f32_batched_cols1_ne2_1_provider.reset();
+    device_context->mul_mat_vec_f32_batched_cols1_ne2_1_k2048_wg32_provider.reset();
+    device_context->mul_mat_vec_f32_batched_cols8_provider.reset();
+    device_context->mul_mat_vec_f32_batched_cols16_provider.reset();
+    device_context->mul_mat_vec_f32_batched_rows2_cols8_provider.reset();
     device_context->mul_mat_id_q4_k_provider.reset();
     device_context->mul_mat_id_q4_k_row4_wg64_provider.reset();
     device_context->mul_mat_id_q4_k_wg64_provider.reset();
@@ -1943,13 +2021,108 @@ static bool ggml_backend_hrx_load_mul_mat_vec_providers(ggml_backend_hrx_device_
     bool ok = ggml_backend_hrx_load_catalog_provider(
         device_context, "hrx_mul_mat_vec_bf16_f32", &device_context->mul_mat_vec_bf16_provider);
     ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_bf16_wg128_f32", &device_context->mul_mat_vec_bf16_wg128_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_bf16_wg64_f32", &device_context->mul_mat_vec_bf16_wg64_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_bf16_cols1_f32", &device_context->mul_mat_vec_bf16_cols1_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_bf16_rows2_cols1_f32",
+        &device_context->mul_mat_vec_bf16_rows2_cols1_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_bf16_rows2_cols1_wg32_f32",
+        &device_context->mul_mat_vec_bf16_rows2_cols1_wg32_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_bf16_rows4_k512_cols1_lds_wg256_f32",
+        &device_context->mul_mat_vec_bf16_rows4_k512_cols1_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_bf16_rows4_k2048_cols1_lds_wg256_f32",
+        &device_context->mul_mat_vec_bf16_rows4_k2048_cols1_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_bf16_cols4_f32", &device_context->mul_mat_vec_bf16_cols4_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_bf16_cols8_f32", &device_context->mul_mat_vec_bf16_cols8_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_bf16_cols16_f32", &device_context->mul_mat_vec_bf16_cols16_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_bf16_cols32_f32", &device_context->mul_mat_vec_bf16_cols32_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_bf16_rows2_cols16_f32",
+        &device_context->mul_mat_vec_bf16_rows2_cols16_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_bf16_wmma16x16_f32",
+        &device_context->mul_mat_vec_bf16_wmma16_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_bf16_swiglu_f32",
+        &device_context->mul_mat_vec_bf16_swiglu_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_bf16_swiglu_wg128_f32",
+        &device_context->mul_mat_vec_bf16_swiglu_wg128_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_bf16_swiglu_wg64_f32",
+        &device_context->mul_mat_vec_bf16_swiglu_wg64_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_bf16_swiglu_cols1_f32",
+        &device_context->mul_mat_vec_bf16_swiglu_cols1_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_bf16_swiglu_rows2_cols1_f32",
+        &device_context->mul_mat_vec_bf16_swiglu_rows2_cols1_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_bf16_swiglu_rows4_k2048_cols1_lds_wg256_f32",
+        &device_context->mul_mat_vec_bf16_swiglu_rows4_k2048_cols1_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_bf16_swiglu_cols4_f32",
+        &device_context->mul_mat_vec_bf16_swiglu_cols4_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_bf16_swiglu_cols8_f32",
+        &device_context->mul_mat_vec_bf16_swiglu_cols8_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_bf16_swiglu_cols16_f32",
+        &device_context->mul_mat_vec_bf16_swiglu_cols16_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_bf16_swiglu_rows2_cols8_f32",
+        &device_context->mul_mat_vec_bf16_swiglu_rows2_cols8_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_bf16_swiglu_wmma16x16_f32",
+        &device_context->mul_mat_vec_bf16_swiglu_wmma16_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_bf16_set_rows_f16",
+        &device_context->mul_mat_vec_bf16_set_rows_f16_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
         device_context, "hrx_mul_mat_vec_f16_f32", &device_context->mul_mat_vec_f16_provider) || ok;
     ok = ggml_backend_hrx_load_catalog_provider(
         device_context, "hrx_mul_mat_vec_f16_batched_f32", &device_context->mul_mat_vec_f16_batched_provider) || ok;
     ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_f16_batched_cols1_f32",
+        &device_context->mul_mat_vec_f16_batched_cols1_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_f16_batched_cols4_f32",
+        &device_context->mul_mat_vec_f16_batched_cols4_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_f16_batched_cols8_f32",
+        &device_context->mul_mat_vec_f16_batched_cols8_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_f16_batched_cols16_f32",
+        &device_context->mul_mat_vec_f16_batched_cols16_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
         device_context, "hrx_mul_mat_vec_f32_f32", &device_context->mul_mat_vec_f32_provider) || ok;
     ok = ggml_backend_hrx_load_catalog_provider(
         device_context, "hrx_mul_mat_vec_f32_batched_f32", &device_context->mul_mat_vec_f32_batched_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_f32_batched_cols1_ne2_1_f32",
+        &device_context->mul_mat_vec_f32_batched_cols1_ne2_1_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_f32_batched_cols1_ne2_1_k2048_wg32_f32",
+        &device_context->mul_mat_vec_f32_batched_cols1_ne2_1_k2048_wg32_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_f32_batched_cols8_f32",
+        &device_context->mul_mat_vec_f32_batched_cols8_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_f32_batched_cols16_f32",
+        &device_context->mul_mat_vec_f32_batched_cols16_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_f32_batched_rows2_cols8_f32",
+        &device_context->mul_mat_vec_f32_batched_rows2_cols8_provider) || ok;
     ok = ggml_backend_hrx_load_catalog_provider(
         device_context, "hrx_quantize_q8_1_f32", &device_context->quantize_q8_1_provider) || ok;
     ok = ggml_backend_hrx_load_catalog_provider(
@@ -2964,6 +3137,191 @@ static const ggml_backend_hrx_op_provider * ggml_backend_hrx_mul_mat_vec_batched
     }
 }
 
+static bool ggml_backend_hrx_provider_available(const ggml_backend_hrx_op_provider & provider);
+
+static int ggml_backend_hrx_mul_mat_vec_bf16_workgroup_size_from_env() {
+    const uint64_t value = ggml_backend_hrx_u64_from_env("GGML_HRX_MUL_MAT_VEC_BF16_WORKGROUP_SIZE", 0);
+    return value == 64 || value == 128 || value == 256 ? static_cast<int>(value) : 0;
+}
+
+static const ggml_backend_hrx_op_provider * ggml_backend_hrx_select_mul_mat_vec_bf16_provider(
+        const ggml_backend_hrx_device_context * device_context,
+        int64_t k,
+        int64_t rows,
+        int64_t cols) {
+    if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_BF16_ROWS2_COLS1_DECODE") &&
+        !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_BF16_ROWS4_K2048_COLS1_DECODE") &&
+        cols == 1 && k == 2048 && rows >= 4 &&
+        ggml_backend_hrx_provider_available(device_context->mul_mat_vec_bf16_rows4_k2048_cols1_provider)) {
+        return &device_context->mul_mat_vec_bf16_rows4_k2048_cols1_provider;
+    }
+    if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_BF16_ROWS2_COLS1_DECODE") &&
+        !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_BF16_ROWS4_K512_COLS1_DECODE") &&
+        cols == 1 && k == 512 && rows == 2048 &&
+        ggml_backend_hrx_provider_available(device_context->mul_mat_vec_bf16_rows4_k512_cols1_provider)) {
+        return &device_context->mul_mat_vec_bf16_rows4_k512_cols1_provider;
+    }
+    if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_BF16_ROWS2_COLS1_DECODE") &&
+        ggml_backend_hrx_env_enabled("GGML_HRX_ENABLE_BF16_ROWS2_COLS1_WG32_DECODE") &&
+        cols == 1 && k == 512 && rows == 2048 &&
+        ggml_backend_hrx_provider_available(device_context->mul_mat_vec_bf16_rows2_cols1_wg32_provider)) {
+        return &device_context->mul_mat_vec_bf16_rows2_cols1_wg32_provider;
+    }
+    if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_BF16_ROWS2_COLS1_DECODE") &&
+        cols == 1 && rows >= 2 &&
+        ggml_backend_hrx_provider_available(device_context->mul_mat_vec_bf16_rows2_cols1_provider)) {
+        return &device_context->mul_mat_vec_bf16_rows2_cols1_provider;
+    }
+    if (cols == 1 && ggml_backend_hrx_provider_available(device_context->mul_mat_vec_bf16_cols1_provider)) {
+        return &device_context->mul_mat_vec_bf16_cols1_provider;
+    }
+    if (!ggml_backend_hrx_approximate_kernels_disabled() &&
+        !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_BF16_WMMA16_PROMPT") &&
+        (k % 16) == 0 && cols == 512 && (rows % 16) == 0 &&
+        ggml_backend_hrx_provider_available(device_context->mul_mat_vec_bf16_wmma16_provider)) {
+        return &device_context->mul_mat_vec_bf16_wmma16_provider;
+    }
+    if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_BF16_ROWS2_COLS16_PROMPT") &&
+        cols == 512 && (rows % 2) == 0 &&
+        ggml_backend_hrx_provider_available(device_context->mul_mat_vec_bf16_rows2_cols16_provider)) {
+        return &device_context->mul_mat_vec_bf16_rows2_cols16_provider;
+    }
+    if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_BF16_COLS32_PROMPT") &&
+        cols == 512 && ggml_backend_hrx_provider_available(device_context->mul_mat_vec_bf16_cols32_provider)) {
+        return &device_context->mul_mat_vec_bf16_cols32_provider;
+    }
+    if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_BF16_COLS16_PROMPT") &&
+        cols == 512 && ggml_backend_hrx_provider_available(device_context->mul_mat_vec_bf16_cols16_provider)) {
+        return &device_context->mul_mat_vec_bf16_cols16_provider;
+    }
+    if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_BF16_COLS8_PROMPT") &&
+        cols == 512 && ggml_backend_hrx_provider_available(device_context->mul_mat_vec_bf16_cols8_provider)) {
+        return &device_context->mul_mat_vec_bf16_cols8_provider;
+    }
+    if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_BF16_COLS4_PROMPT") &&
+        cols == 512 && ggml_backend_hrx_provider_available(device_context->mul_mat_vec_bf16_cols4_provider)) {
+        return &device_context->mul_mat_vec_bf16_cols4_provider;
+    }
+
+    const int workgroup_size = ggml_backend_hrx_mul_mat_vec_bf16_workgroup_size_from_env();
+    const ggml_backend_hrx_op_provider * provider =
+        workgroup_size == 64 ? &device_context->mul_mat_vec_bf16_wg64_provider :
+        workgroup_size == 128 ? &device_context->mul_mat_vec_bf16_wg128_provider :
+        &device_context->mul_mat_vec_bf16_provider;
+    return ggml_backend_hrx_provider_available(*provider) ? provider : &device_context->mul_mat_vec_bf16_provider;
+}
+
+static const ggml_backend_hrx_op_provider * ggml_backend_hrx_select_mul_mat_vec_bf16_swiglu_provider(
+        const ggml_backend_hrx_device_context * device_context,
+        int64_t k,
+        int64_t rows,
+        int64_t cols) {
+    if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_BF16_SWIGLU_ROWS4_K2048_COLS1_DECODE") &&
+        cols == 1 && k == 2048 && rows >= 4 &&
+        ggml_backend_hrx_provider_available(device_context->mul_mat_vec_bf16_swiglu_rows4_k2048_cols1_provider)) {
+        return &device_context->mul_mat_vec_bf16_swiglu_rows4_k2048_cols1_provider;
+    }
+    if (ggml_backend_hrx_env_enabled("GGML_HRX_ENABLE_BF16_SWIGLU_ROWS2_COLS1_DECODE") &&
+        cols == 1 && rows >= 2 &&
+        ggml_backend_hrx_provider_available(device_context->mul_mat_vec_bf16_swiglu_rows2_cols1_provider)) {
+        return &device_context->mul_mat_vec_bf16_swiglu_rows2_cols1_provider;
+    }
+    if (cols == 1 && ggml_backend_hrx_provider_available(device_context->mul_mat_vec_bf16_swiglu_cols1_provider)) {
+        return &device_context->mul_mat_vec_bf16_swiglu_cols1_provider;
+    }
+    if (!ggml_backend_hrx_approximate_kernels_disabled() &&
+        !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_BF16_SWIGLU_WMMA16_PROMPT") &&
+        (k % 16) == 0 && cols == 512 && (rows % 16) == 0 &&
+        ggml_backend_hrx_provider_available(device_context->mul_mat_vec_bf16_swiglu_wmma16_provider)) {
+        return &device_context->mul_mat_vec_bf16_swiglu_wmma16_provider;
+    }
+    if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_BF16_SWIGLU_ROWS2_COLS8_PROMPT") &&
+        cols == 512 && (rows % 2) == 0 &&
+        ggml_backend_hrx_provider_available(device_context->mul_mat_vec_bf16_swiglu_rows2_cols8_provider)) {
+        return &device_context->mul_mat_vec_bf16_swiglu_rows2_cols8_provider;
+    }
+    if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_BF16_SWIGLU_COLS16_PROMPT") &&
+        cols == 512 && ggml_backend_hrx_provider_available(device_context->mul_mat_vec_bf16_swiglu_cols16_provider)) {
+        return &device_context->mul_mat_vec_bf16_swiglu_cols16_provider;
+    }
+    if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_BF16_SWIGLU_COLS8_PROMPT") &&
+        cols == 512 && ggml_backend_hrx_provider_available(device_context->mul_mat_vec_bf16_swiglu_cols8_provider)) {
+        return &device_context->mul_mat_vec_bf16_swiglu_cols8_provider;
+    }
+    if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_BF16_SWIGLU_COLS4_PROMPT") &&
+        cols == 512 && ggml_backend_hrx_provider_available(device_context->mul_mat_vec_bf16_swiglu_cols4_provider)) {
+        return &device_context->mul_mat_vec_bf16_swiglu_cols4_provider;
+    }
+
+    const int workgroup_size = ggml_backend_hrx_mul_mat_vec_bf16_workgroup_size_from_env();
+    const ggml_backend_hrx_op_provider * provider =
+        workgroup_size == 64 ? &device_context->mul_mat_vec_bf16_swiglu_wg64_provider :
+        workgroup_size == 128 ? &device_context->mul_mat_vec_bf16_swiglu_wg128_provider :
+        &device_context->mul_mat_vec_bf16_swiglu_provider;
+    return ggml_backend_hrx_provider_available(*provider) ? provider :
+        &device_context->mul_mat_vec_bf16_swiglu_provider;
+}
+
+static const ggml_backend_hrx_op_provider * ggml_backend_hrx_select_mul_mat_vec_batched_provider(
+        const ggml_backend_hrx_device_context * device_context,
+        const ggml_tensor * op) {
+    const ggml_tensor * src0 = op->src[0];
+    const ggml_tensor * src1 = op->src[1];
+    if (src0->type == GGML_TYPE_F16) {
+        if (src1->ne[1] == 1 &&
+            src0->ne[3] == 1 &&
+            src1->ne[3] == 1 &&
+            op->ne[3] == 1 &&
+            ggml_backend_hrx_provider_available(device_context->mul_mat_vec_f16_batched_cols1_provider)) {
+            return &device_context->mul_mat_vec_f16_batched_cols1_provider;
+        }
+        if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_F16_BATCHED_COLS16_PROMPT") &&
+            src1->ne[1] == 512 &&
+            ggml_backend_hrx_provider_available(device_context->mul_mat_vec_f16_batched_cols16_provider)) {
+            return &device_context->mul_mat_vec_f16_batched_cols16_provider;
+        }
+        if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_F16_BATCHED_COLS8_PROMPT") &&
+            src1->ne[1] == 512 &&
+            ggml_backend_hrx_provider_available(device_context->mul_mat_vec_f16_batched_cols8_provider)) {
+            return &device_context->mul_mat_vec_f16_batched_cols8_provider;
+        }
+        if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_F16_BATCHED_COLS4_PROMPT") &&
+            src1->ne[1] == 512 &&
+            ggml_backend_hrx_provider_available(device_context->mul_mat_vec_f16_batched_cols4_provider)) {
+            return &device_context->mul_mat_vec_f16_batched_cols4_provider;
+        }
+        return &device_context->mul_mat_vec_f16_batched_provider;
+    }
+    if (src0->type == GGML_TYPE_F32) {
+        if (src1->ne[1] == 1 && op->ne[2] == 1 && src0->ne[0] == 2048 &&
+            ggml_backend_hrx_provider_available(
+                device_context->mul_mat_vec_f32_batched_cols1_ne2_1_k2048_wg32_provider)) {
+            return &device_context->mul_mat_vec_f32_batched_cols1_ne2_1_k2048_wg32_provider;
+        }
+        if (src1->ne[1] == 1 && op->ne[2] == 1 &&
+            ggml_backend_hrx_provider_available(device_context->mul_mat_vec_f32_batched_cols1_ne2_1_provider)) {
+            return &device_context->mul_mat_vec_f32_batched_cols1_ne2_1_provider;
+        }
+        if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_F32_BATCHED_ROWS2_COLS8_PROMPT") &&
+            src1->ne[1] == 512 && (src0->ne[1] % 2) == 0 &&
+            ggml_backend_hrx_provider_available(device_context->mul_mat_vec_f32_batched_rows2_cols8_provider)) {
+            return &device_context->mul_mat_vec_f32_batched_rows2_cols8_provider;
+        }
+        if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_F32_BATCHED_COLS16_PROMPT") &&
+            src1->ne[1] == 512 &&
+            ggml_backend_hrx_provider_available(device_context->mul_mat_vec_f32_batched_cols16_provider)) {
+            return &device_context->mul_mat_vec_f32_batched_cols16_provider;
+        }
+        if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_F32_BATCHED_COLS8_PROMPT") &&
+            src1->ne[1] == 512 &&
+            ggml_backend_hrx_provider_available(device_context->mul_mat_vec_f32_batched_cols8_provider)) {
+            return &device_context->mul_mat_vec_f32_batched_cols8_provider;
+        }
+        return &device_context->mul_mat_vec_f32_batched_provider;
+    }
+    return nullptr;
+}
+
 static bool ggml_backend_hrx_q8_1_mmvq_forced() {
     const char * value = std::getenv("GGML_HRX_Q8_1_MMVQ");
     return value && (std::strcmp(value, "all") == 0 || std::strcmp(value, "1") == 0);
@@ -3003,7 +3361,8 @@ static bool ggml_backend_hrx_supports_mul_mat_vec_2d(
         return false;
     }
 
-    const ggml_backend_hrx_op_provider * provider =
+    const ggml_backend_hrx_op_provider * provider = src0->type == GGML_TYPE_BF16 ?
+        ggml_backend_hrx_select_mul_mat_vec_bf16_provider(device_context, src0->ne[0], src0->ne[1], src1->ne[1]) :
         ggml_backend_hrx_mul_mat_vec_provider(device_context, src0->type);
     const int64_t block_size = ggml_blck_size(src0->type);
     return provider &&
@@ -3196,7 +3555,7 @@ static bool ggml_backend_hrx_supports_mul_mat_vec_batched(
     }
 
     const ggml_backend_hrx_op_provider * provider =
-        ggml_backend_hrx_mul_mat_vec_batched_provider(device_context, src0->type);
+        ggml_backend_hrx_select_mul_mat_vec_batched_provider(device_context, op);
     return provider &&
            provider->kind == ggml_backend_hrx_provider_kind::hsaco &&
            (src0->type == GGML_TYPE_F16 || src0->type == GGML_TYPE_F32) &&
@@ -3239,6 +3598,72 @@ static bool ggml_backend_hrx_supports_mul_mat_vec(
     return ggml_backend_hrx_supports_mul_mat_vec_2d(device_context, op) ||
            ggml_backend_hrx_supports_mul_mat_vec_k_q8_1(device_context, op) ||
            ggml_backend_hrx_supports_mul_mat_vec_batched(device_context, op);
+}
+
+static bool ggml_backend_hrx_supports_mul_mat_vec_bf16_swiglu(
+        const ggml_backend_hrx_device_context * device_context,
+        const ggml_tensor * gate,
+        const ggml_tensor * up,
+        const ggml_tensor * swiglu) {
+    if (!gate || !up || !swiglu ||
+        gate->op != GGML_OP_MUL_MAT ||
+        up->op != GGML_OP_MUL_MAT ||
+        swiglu->op != GGML_OP_GLU ||
+        ggml_get_glu_op(swiglu) != GGML_GLU_OP_SWIGLU ||
+        ggml_get_op_params_i32(swiglu, 1) != 0 ||
+        swiglu->src[0] != gate ||
+        swiglu->src[1] != up ||
+        !ggml_backend_hrx_supports_mul_mat_vec(device_context, gate) ||
+        !ggml_backend_hrx_supports_mul_mat_vec(device_context, up)) {
+        return false;
+    }
+
+    const ggml_backend_hrx_op_provider * provider = ggml_backend_hrx_select_mul_mat_vec_bf16_swiglu_provider(
+        device_context, up->src[0]->ne[0], up->src[0]->ne[1], up->src[1]->ne[1]);
+    return provider &&
+           ggml_backend_hrx_provider_available(*provider) &&
+           gate->src[0]->type == GGML_TYPE_BF16 &&
+           up->src[0]->type == GGML_TYPE_BF16 &&
+           gate->src[1] == up->src[1] &&
+           ggml_are_same_shape(gate->src[0], up->src[0]) &&
+           ggml_are_same_stride(gate->src[0], up->src[0]) &&
+           ggml_are_same_shape(gate, up) &&
+           ggml_are_same_shape(swiglu, up) &&
+           swiglu->type == GGML_TYPE_F32 &&
+           swiglu->nb[0] == ggml_type_size(swiglu->type);
+}
+
+static bool ggml_backend_hrx_supports_mul_mat_vec_bf16_set_rows_f16(
+        const ggml_backend_hrx_device_context * device_context,
+        const ggml_tensor * mul_mat,
+        const ggml_tensor * adapter,
+        const ggml_tensor * set_rows) {
+    return ggml_backend_hrx_provider_available(device_context->mul_mat_vec_bf16_set_rows_f16_provider) &&
+           !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_FUSION") &&
+           !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_MUL_MAT_SET_ROWS_FUSION") &&
+           mul_mat &&
+           adapter &&
+           set_rows &&
+           mul_mat->op == GGML_OP_MUL_MAT &&
+           set_rows->op == GGML_OP_SET_ROWS &&
+           ggml_backend_hrx_unwrap_reshape_view_src0(adapter) == mul_mat &&
+           set_rows->src[0] == adapter &&
+           set_rows->type == GGML_TYPE_F16 &&
+           set_rows->src[1] &&
+           set_rows->src[1]->type == GGML_TYPE_I64 &&
+           set_rows->src[2] &&
+           set_rows->src[2]->type == GGML_TYPE_F16 &&
+           ggml_backend_hrx_supports_mul_mat_vec(device_context, mul_mat) &&
+           ggml_backend_hrx_supports_set_rows(device_context, set_rows) &&
+           mul_mat->src[0]->type == GGML_TYPE_BF16 &&
+           mul_mat->src[1]->ne[1] == 1 &&
+           adapter->ne[0] == 1 &&
+           adapter->ne[1] == mul_mat->ne[0] &&
+           adapter->ne[2] == 1 &&
+           adapter->ne[3] == 1 &&
+           set_rows->ne[0] == 1 &&
+           set_rows->ne[2] == 1 &&
+           set_rows->ne[3] == 1;
 }
 
 static const ggml_backend_hrx_op_provider * ggml_backend_hrx_select_mul_mat_id_q4_k_provider(
@@ -5038,18 +5463,29 @@ static ggml_status ggml_backend_hrx_dispatch_mul_mat_vec(
         };
 
         const ggml_backend_hrx_op_provider * provider =
-            ggml_backend_hrx_mul_mat_vec_batched_provider(context->device_context, src0->type);
+            ggml_backend_hrx_select_mul_mat_vec_batched_provider(context->device_context, dst);
         if (!provider || provider->kind != ggml_backend_hrx_provider_kind::hsaco) {
             GGML_LOG_ERROR("%s: batched MUL_MAT provider is unavailable\n", __func__);
             return GGML_STATUS_FAILED;
         }
 
+        const uint32_t provider_rows_per_workgroup =
+            provider == &context->device_context->mul_mat_vec_f32_batched_rows2_cols8_provider ? 2 : 1;
+        const uint32_t provider_cols_per_workgroup =
+            provider == &context->device_context->mul_mat_vec_f32_batched_rows2_cols8_provider ? 8 :
+            provider == &context->device_context->mul_mat_vec_f32_batched_cols16_provider ? 16 :
+            provider == &context->device_context->mul_mat_vec_f32_batched_cols8_provider ? 8 :
+            provider == &context->device_context->mul_mat_vec_f16_batched_cols16_provider ? 16 :
+            provider == &context->device_context->mul_mat_vec_f16_batched_cols8_provider ? 8 :
+            provider == &context->device_context->mul_mat_vec_f16_batched_cols4_provider ? 4 : 1;
         const uint32_t workgroup_size = provider->export_info.workgroup_size[0] ?
             provider->export_info.workgroup_size[0] : 256;
         hrx_dispatch_config_t config = {
             /* .workgroup_count = */ {
-                static_cast<uint32_t>(constants.rows),
-                static_cast<uint32_t>(constants.cols * constants.dst_ne2 * constants.dst_ne3),
+                static_cast<uint32_t>((constants.rows + provider_rows_per_workgroup - 1) / provider_rows_per_workgroup),
+                static_cast<uint32_t>(
+                    ((constants.cols + provider_cols_per_workgroup - 1) / provider_cols_per_workgroup) *
+                    constants.dst_ne2 * constants.dst_ne3),
                 1,
             },
             /* .workgroup_size = */ { workgroup_size, 1, 1 },
@@ -5075,19 +5511,35 @@ static ggml_status ggml_backend_hrx_dispatch_mul_mat_vec(
         /* .cols = */ src1->ne[1],
     };
 
-    const ggml_backend_hrx_op_provider * provider =
+    const ggml_backend_hrx_op_provider * provider = src0->type == GGML_TYPE_BF16 ?
+        ggml_backend_hrx_select_mul_mat_vec_bf16_provider(
+            context->device_context, constants.k, constants.rows, constants.cols) :
         ggml_backend_hrx_mul_mat_vec_provider(context->device_context, src0->type);
     if (!provider || provider->kind != ggml_backend_hrx_provider_kind::hsaco) {
         GGML_LOG_ERROR("%s: MUL_MAT provider is unavailable\n", __func__);
         return GGML_STATUS_FAILED;
     }
 
+    const uint32_t provider_cols_per_workgroup =
+        provider == &context->device_context->mul_mat_vec_bf16_wmma16_provider ? 16 :
+        provider == &context->device_context->mul_mat_vec_bf16_cols32_provider ? 32 :
+        provider == &context->device_context->mul_mat_vec_bf16_rows2_cols16_provider ? 16 :
+        provider == &context->device_context->mul_mat_vec_bf16_cols16_provider ? 16 :
+        provider == &context->device_context->mul_mat_vec_bf16_cols8_provider ? 8 :
+        provider == &context->device_context->mul_mat_vec_bf16_cols4_provider ? 4 : 1;
+    const uint32_t provider_rows_per_workgroup =
+        provider == &context->device_context->mul_mat_vec_bf16_wmma16_provider ? 16 :
+        provider == &context->device_context->mul_mat_vec_bf16_rows4_k512_cols1_provider ? 4 :
+        provider == &context->device_context->mul_mat_vec_bf16_rows4_k2048_cols1_provider ? 4 :
+        provider == &context->device_context->mul_mat_vec_bf16_rows2_cols1_wg32_provider ? 2 :
+        provider == &context->device_context->mul_mat_vec_bf16_rows2_cols1_provider ? 2 :
+        provider == &context->device_context->mul_mat_vec_bf16_rows2_cols16_provider ? 2 : 1;
     const uint32_t workgroup_size = provider->export_info.workgroup_size[0] ?
         provider->export_info.workgroup_size[0] : 256;
     hrx_dispatch_config_t config = {
         /* .workgroup_count = */ {
-            static_cast<uint32_t>(constants.rows),
-            static_cast<uint32_t>(constants.cols),
+            static_cast<uint32_t>((constants.rows + provider_rows_per_workgroup - 1) / provider_rows_per_workgroup),
+            static_cast<uint32_t>((constants.cols + provider_cols_per_workgroup - 1) / provider_cols_per_workgroup),
             1,
         },
         /* .workgroup_size = */ { workgroup_size, 1, 1 },
@@ -5101,6 +5553,102 @@ static ggml_status ggml_backend_hrx_dispatch_mul_mat_vec(
     }
 
     return GGML_STATUS_SUCCESS;
+}
+
+static ggml_status ggml_backend_hrx_dispatch_mul_mat_vec_bf16_swiglu(
+        ggml_backend_hrx_context * context,
+        const ggml_tensor * gate,
+        const ggml_tensor * up,
+        const ggml_tensor * swiglu) {
+    const ggml_tensor * src1 = up->src[1];
+    hrx_buffer_ref_t bindings[4] = {};
+    if (!ggml_backend_hrx_tensor_buffer_ref(gate->src[0], &bindings[0]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(up->src[0], &bindings[1]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(src1, &bindings[2]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(swiglu, &bindings[3])) {
+        GGML_LOG_ERROR("%s: MUL_MAT_SWIGLU tensor is not backed by a HRX buffer\n", __func__);
+        return GGML_STATUS_FAILED;
+    }
+
+    ggml_backend_hrx_mul_mat_vec_constants constants = {
+        /* .k    = */ up->src[0]->ne[0],
+        /* .rows = */ up->src[0]->ne[1],
+        /* .cols = */ src1->ne[1],
+    };
+
+    const ggml_backend_hrx_op_provider * provider = ggml_backend_hrx_select_mul_mat_vec_bf16_swiglu_provider(
+        context->device_context, constants.k, constants.rows, constants.cols);
+    if (!provider || provider->kind != ggml_backend_hrx_provider_kind::hsaco) {
+        GGML_LOG_ERROR("%s: MUL_MAT_SWIGLU provider is unavailable\n", __func__);
+        return GGML_STATUS_FAILED;
+    }
+
+    const uint32_t provider_rows_per_workgroup =
+        provider == &context->device_context->mul_mat_vec_bf16_swiglu_wmma16_provider ? 16 :
+        provider == &context->device_context->mul_mat_vec_bf16_swiglu_rows4_k2048_cols1_provider ? 4 :
+        provider == &context->device_context->mul_mat_vec_bf16_swiglu_rows2_cols1_provider ? 2 :
+        provider == &context->device_context->mul_mat_vec_bf16_swiglu_rows2_cols8_provider ? 2 : 1;
+    const uint32_t provider_cols_per_workgroup =
+        provider == &context->device_context->mul_mat_vec_bf16_swiglu_wmma16_provider ? 16 :
+        provider == &context->device_context->mul_mat_vec_bf16_swiglu_rows2_cols8_provider ? 8 :
+        provider == &context->device_context->mul_mat_vec_bf16_swiglu_cols16_provider ? 16 :
+        provider == &context->device_context->mul_mat_vec_bf16_swiglu_cols8_provider ? 8 :
+        provider == &context->device_context->mul_mat_vec_bf16_swiglu_cols4_provider ? 4 : 1;
+    const uint32_t workgroup_size = provider->export_info.workgroup_size[0] ?
+        provider->export_info.workgroup_size[0] : 256;
+    hrx_dispatch_config_t config = {
+        /* .workgroup_count = */ {
+            static_cast<uint32_t>((constants.rows + provider_rows_per_workgroup - 1) / provider_rows_per_workgroup),
+            static_cast<uint32_t>((constants.cols + provider_cols_per_workgroup - 1) / provider_cols_per_workgroup),
+            1,
+        },
+        /* .workgroup_size = */ { workgroup_size, 1, 1 },
+        /* .subgroup_size = */ 0,
+    };
+
+    return GGML_HRX_CHECK(hrx_stream_dispatch(
+        context->stream, provider->executable, provider->export_ordinal, &config,
+        &constants, sizeof(constants), bindings, 4, HRX_DISPATCH_FLAG_NONE)) ?
+        GGML_STATUS_SUCCESS : GGML_STATUS_FAILED;
+}
+
+static ggml_status ggml_backend_hrx_dispatch_mul_mat_vec_bf16_set_rows_f16(
+        ggml_backend_hrx_context * context,
+        const ggml_tensor * mul_mat,
+        const ggml_tensor * set_rows) {
+    const ggml_tensor * src0 = mul_mat->src[0];
+    const ggml_tensor * src1 = mul_mat->src[1];
+    const ggml_tensor * idxs = set_rows->src[1];
+    hrx_buffer_ref_t bindings[4] = {};
+    if (!ggml_backend_hrx_tensor_buffer_ref(src0, &bindings[0]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(src1, &bindings[1]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(idxs, &bindings[2]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(set_rows, &bindings[3])) {
+        GGML_LOG_ERROR("%s: MUL_MAT_SET_ROWS tensor is not backed by a HRX buffer\n", __func__);
+        return GGML_STATUS_FAILED;
+    }
+
+    ggml_backend_hrx_mul_mat_vec_bf16_set_rows_constants constants = {
+        /* .k            = */ src0->ne[0],
+        /* .rows         = */ src0->ne[1],
+        /* .set_rows_ne1 = */ set_rows->ne[1],
+        /* .idx_nb0      = */ static_cast<int64_t>(idxs->nb[0]),
+        /* .dst_nb1      = */ static_cast<int64_t>(set_rows->nb[1]),
+    };
+
+    const auto & provider = context->device_context->mul_mat_vec_bf16_set_rows_f16_provider;
+    const uint32_t workgroup_size = provider.export_info.workgroup_size[0] ?
+        provider.export_info.workgroup_size[0] : 256;
+    hrx_dispatch_config_t config = {
+        /* .workgroup_count = */ { static_cast<uint32_t>(constants.rows), 1, 1 },
+        /* .workgroup_size = */ { workgroup_size, 1, 1 },
+        /* .subgroup_size = */ 0,
+    };
+
+    return GGML_HRX_CHECK(hrx_stream_dispatch(
+        context->stream, provider.executable, provider.export_ordinal, &config,
+        &constants, sizeof(constants), bindings, 4, HRX_DISPATCH_FLAG_NONE)) ?
+        GGML_STATUS_SUCCESS : GGML_STATUS_FAILED;
 }
 
 static ggml_status ggml_backend_hrx_dispatch_mul_mat_id_q4_k(
@@ -6466,6 +7014,29 @@ static ggml_status ggml_backend_hrx_graph_compute(ggml_backend_t backend, ggml_c
             i = ssm_update.last_idx;
             continue;
         }
+        if (node->op == GGML_OP_MUL_MAT &&
+            !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_FUSION") &&
+            !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_MUL_MAT_SWIGLU_FUSION") &&
+            i + 2 < cgraph->n_nodes &&
+            cgraph->nodes[i + 1]->op == GGML_OP_MUL_MAT &&
+            cgraph->nodes[i + 2]->op == GGML_OP_GLU) {
+            const ggml_tensor * first = node;
+            const ggml_tensor * second = cgraph->nodes[i + 1];
+            const ggml_tensor * swiglu = cgraph->nodes[i + 2];
+            const ggml_tensor * gate = swiglu->src[0];
+            const ggml_tensor * up = swiglu->src[1];
+            if (((gate == first && up == second) || (gate == second && up == first)) &&
+                ggml_backend_hrx_supports_mul_mat_vec_bf16_swiglu(context->device_context, gate, up, swiglu) &&
+                ggml_can_fuse_subgraph(
+                    cgraph, i, { GGML_OP_MUL_MAT, GGML_OP_MUL_MAT, GGML_OP_GLU }, { i + 2 })) {
+                if (ggml_backend_hrx_dispatch_mul_mat_vec_bf16_swiglu(context, gate, up, swiglu) !=
+                    GGML_STATUS_SUCCESS) {
+                    return GGML_STATUS_FAILED;
+                }
+                i += 2;
+                continue;
+            }
+        }
         if (node->op == GGML_OP_MUL_MAT_ID &&
             !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_FUSION") &&
             !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_MUL_MAT_ID_SWIGLU_FUSION") &&
@@ -6628,6 +7199,15 @@ static ggml_status ggml_backend_hrx_graph_compute(ggml_backend_t backend, ggml_c
                 }
                 break;
             case GGML_OP_SET_ROWS:
+                if (const ggml_tensor * mul_mat = ggml_backend_hrx_unwrap_reshape_view_src0(node->src[0]);
+                    ggml_backend_hrx_supports_mul_mat_vec_bf16_set_rows_f16(
+                        context->device_context, mul_mat, node->src[0], node)) {
+                    if (ggml_backend_hrx_dispatch_mul_mat_vec_bf16_set_rows_f16(context, mul_mat, node) !=
+                        GGML_STATUS_SUCCESS) {
+                        return GGML_STATUS_FAILED;
+                    }
+                    break;
+                }
                 if (!ggml_backend_hrx_supports_set_rows(context->device_context, node)) {
                     GGML_LOG_ERROR("%s: SET_ROWS shape/type/layout is unsupported\n", __func__);
                     return GGML_STATUS_FAILED;

@@ -1911,6 +1911,106 @@ static void run_mul_mat_id_q4_k_swiglu_fusion_case(
     expect_near(actual, gate_expected, tolerance, label);
 }
 
+static void run_bf16_mul_mat_swiglu_fusion_case(ggml_backend_t backend, const char * label) {
+    scoped_env_var disable_swiglu("GGML_HRX_DISABLE_SWIGLU", "1");
+    scoped_env_var disable_wmma("GGML_HRX_DISABLE_BF16_SWIGLU_WMMA16_PROMPT", "1");
+    scoped_env_var disable_cols16("GGML_HRX_DISABLE_BF16_SWIGLU_COLS16_PROMPT", "1");
+
+    static constexpr int64_t K = 256;
+    static constexpr int64_t ROWS = 16;
+    static constexpr int64_t COLS = 512;
+
+    ggml_context_ptr ctx = make_context();
+    ggml_tensor * gate_lhs = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_BF16, K, ROWS);
+    ggml_tensor * up_lhs = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_BF16, K, ROWS);
+    ggml_tensor * rhs = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, K, COLS);
+    ggml_tensor * gate = ggml_mul_mat(ctx.get(), gate_lhs, rhs);
+    ggml_tensor * up = ggml_mul_mat(ctx.get(), up_lhs, rhs);
+    ggml_tensor * out = ggml_swiglu_split(ctx.get(), gate, up);
+
+    ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 16, false);
+    ggml_build_forward_expand(graph, out);
+    ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
+    GGML_ASSERT(buffer != nullptr);
+
+    std::vector<float> gate_f32(static_cast<size_t>(K * ROWS));
+    std::vector<float> up_f32(gate_f32.size());
+    std::vector<float> rhs_f32(static_cast<size_t>(K * COLS));
+    for (size_t i = 0; i < gate_f32.size(); ++i) {
+        gate_f32[i] = static_cast<float>(static_cast<int>((i * 17 + 11) % 103) - 51) / 67.0f;
+        up_f32[i] = static_cast<float>(static_cast<int>((i * 19 + 5) % 107) - 53) / 71.0f;
+    }
+    for (size_t i = 0; i < rhs_f32.size(); ++i) {
+        rhs_f32[i] = static_cast<float>(static_cast<int>((i * 23 + 3) % 109) - 54) / 73.0f;
+    }
+
+    std::vector<float> gate_reference;
+    std::vector<float> up_reference;
+    std::vector<uint8_t> gate_storage;
+    std::vector<uint8_t> up_storage;
+    prepare_mul_mat_lhs(GGML_TYPE_BF16, K, ROWS, gate_f32, gate_reference, gate_storage);
+    prepare_mul_mat_lhs(GGML_TYPE_BF16, K, ROWS, up_f32, up_reference, up_storage);
+    ggml_backend_tensor_set(gate_lhs, gate_storage.data(), 0, gate_storage.size());
+    ggml_backend_tensor_set(up_lhs, up_storage.data(), 0, up_storage.size());
+    ggml_backend_tensor_set(rhs, rhs_f32.data(), 0, rhs_f32.size() * sizeof(float));
+
+    GGML_ASSERT(ggml_backend_graph_compute(backend, graph) == GGML_STATUS_SUCCESS);
+    std::vector<float> gate_expected = reference_mul_mat(gate_reference, rhs_f32, K, ROWS, COLS);
+    std::vector<float> up_expected = reference_mul_mat(up_reference, rhs_f32, K, ROWS, COLS);
+    for (size_t i = 0; i < gate_expected.size(); ++i) {
+        gate_expected[i] = gate_expected[i] / (1.0f + std::exp(-gate_expected[i])) * up_expected[i];
+    }
+    expect_near(tensor_to_float(out), gate_expected, 3.0e-2f, label);
+}
+
+static void run_bf16_mul_mat_set_rows_fusion_case(ggml_backend_t backend, const char * label) {
+    static constexpr int64_t K = 256;
+    static constexpr int64_t ROWS = 2;
+    static constexpr int64_t DST_ROWS = 4;
+
+    ggml_context_ptr ctx = make_context();
+    ggml_tensor * lhs = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_BF16, K, ROWS);
+    ggml_tensor * rhs = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, K, 1);
+    ggml_tensor * mul_mat = ggml_mul_mat(ctx.get(), lhs, rhs);
+    ggml_tensor * adapter = ggml_reshape_2d(ctx.get(), mul_mat, 1, ROWS);
+    ggml_tensor * dst = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F16, 1, DST_ROWS);
+    ggml_tensor * rows = ggml_new_tensor_1d(ctx.get(), GGML_TYPE_I64, ROWS);
+    ggml_tensor * out = ggml_set_rows(ctx.get(), dst, adapter, rows);
+
+    ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 16, false);
+    ggml_build_forward_expand(graph, out);
+    ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
+    GGML_ASSERT(buffer != nullptr);
+
+    std::vector<float> lhs_f32(static_cast<size_t>(K * ROWS));
+    std::vector<float> rhs_f32(static_cast<size_t>(K));
+    for (size_t i = 0; i < lhs_f32.size(); ++i) {
+        lhs_f32[i] = static_cast<float>(static_cast<int>((i * 17 + 7) % 97) - 48) / 61.0f;
+    }
+    for (size_t i = 0; i < rhs_f32.size(); ++i) {
+        rhs_f32[i] = static_cast<float>(static_cast<int>((i * 19 + 3) % 89) - 44) / 59.0f;
+    }
+
+    std::vector<float> lhs_reference;
+    std::vector<uint8_t> lhs_storage;
+    prepare_mul_mat_lhs(GGML_TYPE_BF16, K, ROWS, lhs_f32, lhs_reference, lhs_storage);
+    const std::vector<uint8_t> dst_zero(ggml_nbytes(dst), 0);
+    const int64_t row_ids[ROWS] = { 2, 0 };
+
+    ggml_backend_tensor_set(lhs, lhs_storage.data(), 0, lhs_storage.size());
+    ggml_backend_tensor_set(rhs, rhs_f32.data(), 0, rhs_f32.size() * sizeof(float));
+    ggml_backend_tensor_set(dst, dst_zero.data(), 0, dst_zero.size());
+    ggml_backend_tensor_set(rows, row_ids, 0, sizeof(row_ids));
+    GGML_ASSERT(ggml_backend_graph_compute(backend, graph) == GGML_STATUS_SUCCESS);
+
+    std::vector<float> expected(DST_ROWS, 0.0f);
+    const std::vector<float> matmul = reference_mul_mat(lhs_reference, rhs_f32, K, ROWS, 1);
+    for (int64_t row = 0; row < ROWS; ++row) {
+        expected[static_cast<size_t>(row_ids[row])] = ggml_fp16_to_fp32(ggml_fp32_to_fp16(matmul[row]));
+    }
+    expect_near(tensor_to_float(out), expected, 0.0f, label);
+}
+
 static void expect_flash_attn_ext_prefill_samples(
         const std::vector<float> & actual,
         const std::vector<float> & q,
@@ -1918,6 +2018,7 @@ static void expect_flash_attn_ext_prefill_samples(
         const std::vector<float> & v,
         const std::vector<float> & mask,
         float scale,
+        float logit_softcap,
         const char * label) {
     static constexpr int64_t D = 256;
     static constexpr int64_t N = 512;
@@ -1941,7 +2042,11 @@ static void expect_flash_attn_ext_prefill_samples(
                         q[index_4d(col, token, head, 0, D, N, H)] *
                         k[index_4d(col, t, kv_head, 0, D, KV, H_KV)];
                 }
-                score = score * scale + mask[index_4d(t, token, 0, 0, KV, N, 1)];
+                score *= scale;
+                if (logit_softcap != 0.0f) {
+                    score = logit_softcap * std::tanh(score / logit_softcap);
+                }
+                score += mask[index_4d(t, token, 0, 0, KV, N, 1)];
                 logits[static_cast<size_t>(t)] = score;
                 max_score = std::max(max_score, score);
             }
@@ -1981,7 +2086,8 @@ static void run_flash_attn_ext_prefill_f16_case(
         ggml_backend_dev_t dev,
         bool disable_direct,
         bool disable_wmma,
-        const char * label) {
+        const char * label,
+        float logit_softcap = 0.0f) {
     scoped_env_var disable_decode("GGML_HRX_DISABLE_FLASH_ATTN_EXT_DECODE", "1");
     scoped_env_var disable_direct_var(
         "GGML_HRX_DISABLE_F16_PREFILL_FA_DIRECT", disable_direct ? "1" : "0");
@@ -2001,7 +2107,7 @@ static void run_flash_attn_ext_prefill_f16_case(
     ggml_tensor * k = ggml_new_tensor_4d(ctx.get(), GGML_TYPE_F16, D, KV, H_KV, S);
     ggml_tensor * v = ggml_new_tensor_4d(ctx.get(), GGML_TYPE_F16, D, KV, H_KV, S);
     ggml_tensor * mask = ggml_new_tensor_4d(ctx.get(), GGML_TYPE_F16, KV, N, 1, S);
-    ggml_tensor * out = ggml_flash_attn_ext(ctx.get(), q, k, v, mask, scale, 0.0f, 0.0f);
+    ggml_tensor * out = ggml_flash_attn_ext(ctx.get(), q, k, v, mask, scale, 0.0f, logit_softcap);
     GGML_ASSERT(ggml_backend_dev_supports_op(dev, out));
 
     ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 16, false);
@@ -2048,7 +2154,7 @@ static void run_flash_attn_ext_prefill_f16_case(
 
     GGML_ASSERT(ggml_backend_graph_compute(backend, graph) == GGML_STATUS_SUCCESS);
     expect_flash_attn_ext_prefill_samples(
-        tensor_to_float(out), q_data, k_reference, v_reference, mask_reference, scale, label);
+        tensor_to_float(out), q_data, k_reference, v_reference, mask_reference, scale, logit_softcap, label);
 }
 
 static float ssm_conv_update_value(
@@ -2779,6 +2885,55 @@ int main() {
         run_mul_mat_vec_case(
             backend.get(), dev, GGML_TYPE_Q8_0, 2 * ggml_blck_size(GGML_TYPE_Q8_0), 2, 3,
             5.0e-4f, "mul_mat_vec_q8_0_two_blocks");
+        {
+            scoped_env_var disable_wmma("GGML_HRX_DISABLE_BF16_WMMA16_PROMPT", "1");
+            scoped_env_var disable_cols32("GGML_HRX_DISABLE_BF16_COLS32_PROMPT", "1");
+            run_mul_mat_vec_case(
+                backend.get(), dev, GGML_TYPE_BF16, 256, 16, 512,
+                3.0e-2f, "mul_mat_vec_bf16_cols16_prompt");
+        }
+        run_mul_mat_vec_case(
+            backend.get(), dev, GGML_TYPE_BF16, 256, 16, 512,
+            6.0e-2f, "mul_mat_vec_bf16_wmma16_prompt");
+        run_mul_mat_vec_case(
+            backend.get(), dev, GGML_TYPE_BF16, 512, 2048, 1,
+            3.0e-2f, "mul_mat_vec_bf16_rows4_k512_decode");
+        {
+            scoped_env_var force_bf16_wg128("GGML_HRX_MUL_MAT_VEC_BF16_WORKGROUP_SIZE", "128");
+            run_mul_mat_vec_case(
+                backend.get(), dev, GGML_TYPE_BF16, 257, 3, 2,
+                2.0e-3f, "mul_mat_vec_bf16_wg128");
+        }
+        run_mul_mat_vec_batched_case(
+            backend.get(), dev, GGML_TYPE_F16, 256, 16, 512, 2, 1, 2, 1,
+            2.0e-2f, "mul_mat_vec_f16_batched_cols16_prompt");
+        {
+            scoped_env_var disable_f16_cols16("GGML_HRX_DISABLE_F16_BATCHED_COLS16_PROMPT", "1");
+            run_mul_mat_vec_batched_case(
+                backend.get(), dev, GGML_TYPE_F16, 256, 16, 512, 2, 1, 2, 1,
+                2.0e-2f, "mul_mat_vec_f16_batched_cols8_prompt");
+        }
+        {
+            scoped_env_var disable_f16_cols16("GGML_HRX_DISABLE_F16_BATCHED_COLS16_PROMPT", "1");
+            scoped_env_var disable_f16_cols8("GGML_HRX_DISABLE_F16_BATCHED_COLS8_PROMPT", "1");
+            run_mul_mat_vec_batched_case(
+                backend.get(), dev, GGML_TYPE_F16, 256, 16, 512, 2, 1, 2, 1,
+                2.0e-2f, "mul_mat_vec_f16_batched_cols4_prompt");
+        }
+        run_mul_mat_vec_batched_case(
+            backend.get(), dev, GGML_TYPE_F32, 256, 16, 512, 2, 1, 2, 1,
+            1.0e-3f, "mul_mat_vec_f32_batched_rows2_cols8_prompt");
+        {
+            scoped_env_var disable_f32_rows2("GGML_HRX_DISABLE_F32_BATCHED_ROWS2_COLS8_PROMPT", "1");
+            run_mul_mat_vec_batched_case(
+                backend.get(), dev, GGML_TYPE_F32, 256, 16, 512, 2, 1, 2, 1,
+                1.0e-3f, "mul_mat_vec_f32_batched_cols16_prompt");
+        }
+        run_mul_mat_vec_batched_case(
+            backend.get(), dev, GGML_TYPE_F32, 2048, 4, 1, 1, 1, 1, 1,
+            2.0e-3f, "mul_mat_vec_f32_batched_cols1_k2048");
+        run_bf16_mul_mat_swiglu_fusion_case(backend.get(), "mul_mat_vec_bf16_swiglu_fusion");
+        run_bf16_mul_mat_set_rows_fusion_case(backend.get(), "mul_mat_vec_bf16_set_rows_fusion");
         run_mul_mat_id_q4_k_case(
             backend.get(), dev, ggml_blck_size(GGML_TYPE_Q4_K), 3, 2, 3, 4, false,
             6.0e-4f, "mul_mat_id_q4_k_wg64");
@@ -2872,7 +3027,7 @@ int main() {
         run_flash_attn_ext_prefill_f16_case(
             backend.get(), dev, true, false, "flash_attn_ext_f16_prefill_wmma16");
         run_flash_attn_ext_prefill_f16_case(
-            backend.get(), dev, true, true, "flash_attn_ext_f16_prefill_tile8");
+            backend.get(), dev, true, true, "flash_attn_ext_f16_prefill_tile8_softcap", 4.0f);
         run_soft_max_case(backend.get(), 1, false);
         run_soft_max_case(backend.get(), 257, false);
         run_soft_max_case(backend.get(), 257, true);

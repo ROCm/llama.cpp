@@ -51,7 +51,7 @@ file(MAKE_DIRECTORY "${GGML_HRX_GENERATED_DIR}" "${GGML_HRX_HSACO_ROOT}")
 set(GGML_HRX_HSACO_OUTPUTS)
 
 function(ggml_hrx_add_kernel_source)
-    cmake_parse_arguments(ARG "" "SOURCE;WAVEFRONT_SIZE" "DEPS;FLAGS" ${ARGN})
+    cmake_parse_arguments(ARG "" "SOURCE;WAVEFRONT_SIZE" "DEPS;FLAGS;ARCH_PREFIXES" ${ARGN})
     if (NOT ARG_SOURCE)
         message(FATAL_ERROR "ggml_hrx_add_kernel_source requires SOURCE")
     endif()
@@ -74,6 +74,18 @@ function(ggml_hrx_add_kernel_source)
     list(APPEND GGML_HRX_KERNEL_COMPILE_FLAGS ${ARG_FLAGS})
 
     foreach(GGML_HRX_AMDGPU_TARGET IN LISTS GGML_HRX_AMDGPU_TARGET_LIST_CANONICAL)
+        if (ARG_ARCH_PREFIXES)
+            set(GGML_HRX_BUILD_FOR_TARGET OFF)
+            foreach(GGML_HRX_ARCH_PREFIX IN LISTS ARG_ARCH_PREFIXES)
+                string(FIND "${GGML_HRX_AMDGPU_TARGET}" "${GGML_HRX_ARCH_PREFIX}" GGML_HRX_ARCH_PREFIX_POS)
+                if (GGML_HRX_ARCH_PREFIX_POS EQUAL 0)
+                    set(GGML_HRX_BUILD_FOR_TARGET ON)
+                endif()
+            endforeach()
+            if (NOT GGML_HRX_BUILD_FOR_TARGET)
+                continue()
+            endif()
+        endif()
         set(GGML_HRX_HSACO_DIR "${GGML_HRX_HSACO_ROOT}/${GGML_HRX_AMDGPU_TARGET}")
         set(GGML_HRX_HSACO_OUTPUT "${GGML_HRX_HSACO_DIR}/${GGML_HRX_HSACO_NAME}")
         file(MAKE_DIRECTORY "${GGML_HRX_HSACO_DIR}")
@@ -109,7 +121,6 @@ set(GGML_HRX_WAVE32_KERNEL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/flash_attn_ext_f32_bf16_decode.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/flash_attn_ext_f32_f16_decode.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/flash_attn_ext_f32_f16_prefill_tile8.hip.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/flash_attn_ext_f32_f16_prefill_wmma16.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/flash_attn_ext_f32_f32_decode.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/flash_attn_ext_f32_q4_0_decode.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/flash_attn_ext_f32_q8_0_decode.hip.cpp"
@@ -121,6 +132,8 @@ set(GGML_HRX_WAVE32_KERNEL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_f32.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_f32_broadcast.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_bf16.hip.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_bf16_set_rows.hip.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_bf16_swiglu.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_f16.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_f16_batched.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_f32.hip.cpp"
@@ -134,7 +147,6 @@ set(GGML_HRX_WAVE32_KERNEL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q4_k_q8_1.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q5_k.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q6_k.hip.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q8_0.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_sum8_f32.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/quantize_q8_1.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/rms_norm.hip.cpp"
@@ -150,7 +162,6 @@ set(GGML_HRX_WAVE32_KERNEL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/unary_f32.hip.cpp")
 
 set(GGML_HRX_WAVE64_KERNEL_SOURCES
-    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_id_q4_k_q8_1_x4_mmq.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/ssm_conv_f32.hip.cpp"
 )
 
@@ -165,33 +176,53 @@ endforeach()
 ggml_hrx_add_kernel_source(
     SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/kernels/flash_attn_ext_f32_f16_prefill_direct.hip.cpp"
     WAVEFRONT_SIZE 32
+    ARCH_PREFIXES gfx11
     DEPS
         "${CMAKE_CURRENT_SOURCE_DIR}/kernels/flash_attn_ext_f32_f16_prefill_direct_generic.inc"
         "${CMAKE_CURRENT_SOURCE_DIR}/kernels/flash_attn_ext_f32_f16_prefill_direct_gfx11.inc"
 )
 ggml_hrx_add_kernel_source(
+    SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/kernels/flash_attn_ext_f32_f16_prefill_wmma16.hip.cpp"
+    WAVEFRONT_SIZE 32
+    ARCH_PREFIXES gfx11
+)
+ggml_hrx_add_kernel_source(
+    SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_id_q4_k_q8_1_x4_mmq.hip.cpp"
+    WAVEFRONT_SIZE 64
+    ARCH_PREFIXES gfx11
+)
+ggml_hrx_add_kernel_source(
     SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q5_k_q8_1.hip.cpp"
     WAVEFRONT_SIZE 32
+    ARCH_PREFIXES gfx11
     DEPS "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q5_k_q8_1_common.hip.inc"
     FLAGS -O3
 )
 ggml_hrx_add_kernel_source(
     SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q5_k_q8_1_wave64.hip.cpp"
     WAVEFRONT_SIZE 64
+    ARCH_PREFIXES gfx11
     DEPS "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q5_k_q8_1_common.hip.inc"
     FLAGS -O3
 )
 ggml_hrx_add_kernel_source(
     SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q6_k_q8_1.hip.cpp"
     WAVEFRONT_SIZE 32
+    ARCH_PREFIXES gfx11
     DEPS "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q6_k_q8_1_common.hip.inc"
     FLAGS -O3
 )
 ggml_hrx_add_kernel_source(
     SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q6_k_q8_1_wave64.hip.cpp"
     WAVEFRONT_SIZE 64
+    ARCH_PREFIXES gfx11
     DEPS "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q6_k_q8_1_common.hip.inc"
     FLAGS -O3
+)
+ggml_hrx_add_kernel_source(
+    SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q8_0.hip.cpp"
+    WAVEFRONT_SIZE 32
+    ARCH_PREFIXES gfx11
 )
 ggml_hrx_add_kernel_source(
     SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/kernels/topk_moe_f32_shared.hip.cpp"

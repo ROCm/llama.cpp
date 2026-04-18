@@ -273,6 +273,232 @@ KERNELS = [
         "workgroup_size": (256, 1, 1),
     },
     {
+        "name": "hrx_mul_mat_vec_bf16_wg128_f32",
+        "source": "mul_mat_vec_bf16.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "parameter_count": 6,
+        "constants_size": 24,
+        "workgroup_size": (128, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_bf16_wg64_f32",
+        "source": "mul_mat_vec_bf16.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "parameter_count": 6,
+        "constants_size": 24,
+        "workgroup_size": (64, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_bf16_cols1_f32",
+        "source": "mul_mat_vec_bf16.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "parameter_count": 6,
+        "constants_size": 24,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_bf16_rows2_cols1_f32",
+        "source": "mul_mat_vec_bf16.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "parameter_count": 6,
+        "constants_size": 24,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_bf16_rows2_cols1_wg32_f32",
+        "source": "mul_mat_vec_bf16.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "parameter_count": 6,
+        "constants_size": 24,
+        "workgroup_size": (32, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_bf16_rows4_k512_cols1_lds_wg256_f32",
+        "source": "mul_mat_vec_bf16.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "parameter_count": 6,
+        "constants_size": 24,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_bf16_rows4_k2048_cols1_lds_wg256_f32",
+        "source": "mul_mat_vec_bf16.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "parameter_count": 6,
+        "constants_size": 24,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_bf16_cols4_f32",
+        "source": "mul_mat_vec_bf16.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "parameter_count": 6,
+        "constants_size": 24,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_bf16_cols8_f32",
+        "source": "mul_mat_vec_bf16.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "parameter_count": 6,
+        "constants_size": 24,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_bf16_cols16_f32",
+        "source": "mul_mat_vec_bf16.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "parameter_count": 6,
+        "constants_size": 24,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_bf16_cols32_f32",
+        "source": "mul_mat_vec_bf16.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "parameter_count": 6,
+        "constants_size": 24,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_bf16_rows2_cols16_f32",
+        "source": "mul_mat_vec_bf16.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "parameter_count": 6,
+        "constants_size": 24,
+        "workgroup_size": (32, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_bf16_wmma16x16_f32",
+        "source": "mul_mat_vec_bf16.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "parameter_count": 6,
+        "constants_size": 24,
+        "workgroup_size": (32, 1, 1),
+        "arch_prefixes": ("gfx11",),
+    },
+    {
+        "name": "hrx_mul_mat_vec_bf16_swiglu_f32",
+        "source": "mul_mat_vec_bf16_swiglu.hip.cpp",
+        "format": None,
+        "binding_count": 4,
+        "parameter_count": 7,
+        "constants_size": 24,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_bf16_swiglu_wg128_f32",
+        "source": "mul_mat_vec_bf16_swiglu.hip.cpp",
+        "format": None,
+        "binding_count": 4,
+        "parameter_count": 7,
+        "constants_size": 24,
+        "workgroup_size": (128, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_bf16_swiglu_wg64_f32",
+        "source": "mul_mat_vec_bf16_swiglu.hip.cpp",
+        "format": None,
+        "binding_count": 4,
+        "parameter_count": 7,
+        "constants_size": 24,
+        "workgroup_size": (64, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_bf16_swiglu_wmma16x16_f32",
+        "source": "mul_mat_vec_bf16_swiglu.hip.cpp",
+        "format": None,
+        "binding_count": 4,
+        "parameter_count": 7,
+        "constants_size": 24,
+        "workgroup_size": (32, 1, 1),
+        "arch_prefixes": ("gfx11",),
+    },
+    {
+        "name": "hrx_mul_mat_vec_bf16_swiglu_cols1_f32",
+        "source": "mul_mat_vec_bf16_swiglu.hip.cpp",
+        "format": None,
+        "binding_count": 4,
+        "parameter_count": 7,
+        "constants_size": 24,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_bf16_swiglu_rows2_cols1_f32",
+        "source": "mul_mat_vec_bf16_swiglu.hip.cpp",
+        "format": None,
+        "binding_count": 4,
+        "parameter_count": 7,
+        "constants_size": 24,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_bf16_swiglu_rows4_k2048_cols1_lds_wg256_f32",
+        "source": "mul_mat_vec_bf16_swiglu.hip.cpp",
+        "format": None,
+        "binding_count": 4,
+        "parameter_count": 7,
+        "constants_size": 24,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_bf16_swiglu_cols4_f32",
+        "source": "mul_mat_vec_bf16_swiglu.hip.cpp",
+        "format": None,
+        "binding_count": 4,
+        "parameter_count": 7,
+        "constants_size": 24,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_bf16_swiglu_cols8_f32",
+        "source": "mul_mat_vec_bf16_swiglu.hip.cpp",
+        "format": None,
+        "binding_count": 4,
+        "parameter_count": 7,
+        "constants_size": 24,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_bf16_swiglu_cols16_f32",
+        "source": "mul_mat_vec_bf16_swiglu.hip.cpp",
+        "format": None,
+        "binding_count": 4,
+        "parameter_count": 7,
+        "constants_size": 24,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_bf16_swiglu_rows2_cols8_f32",
+        "source": "mul_mat_vec_bf16_swiglu.hip.cpp",
+        "format": None,
+        "binding_count": 4,
+        "parameter_count": 7,
+        "constants_size": 24,
+        "workgroup_size": (32, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_bf16_set_rows_f16",
+        "source": "mul_mat_vec_bf16_set_rows.hip.cpp",
+        "format": None,
+        "binding_count": 4,
+        "constants_size": 40,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
         "name": "hrx_mul_mat_vec_f16_f32",
         "source": "mul_mat_vec_f16.hip.cpp",
         "format": None,
@@ -290,6 +516,38 @@ KERNELS = [
         "workgroup_size": (256, 1, 1),
     },
     {
+        "name": "hrx_mul_mat_vec_f16_batched_cols1_f32",
+        "source": "mul_mat_vec_f16_batched.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "constants_size": 128,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_f16_batched_cols4_f32",
+        "source": "mul_mat_vec_f16_batched.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "constants_size": 128,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_f16_batched_cols8_f32",
+        "source": "mul_mat_vec_f16_batched.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "constants_size": 128,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_f16_batched_cols16_f32",
+        "source": "mul_mat_vec_f16_batched.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "constants_size": 128,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
         "name": "hrx_mul_mat_vec_f32_f32",
         "source": "mul_mat_vec_f32.hip.cpp",
         "format": None,
@@ -300,6 +558,46 @@ KERNELS = [
     },
     {
         "name": "hrx_mul_mat_vec_f32_batched_f32",
+        "source": "mul_mat_vec_f32_batched.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "constants_size": 128,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_f32_batched_cols1_ne2_1_f32",
+        "source": "mul_mat_vec_f32_batched.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "constants_size": 128,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_f32_batched_cols1_ne2_1_k2048_wg32_f32",
+        "source": "mul_mat_vec_f32_batched.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "constants_size": 128,
+        "workgroup_size": (32, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_f32_batched_cols8_f32",
+        "source": "mul_mat_vec_f32_batched.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "constants_size": 128,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_f32_batched_cols16_f32",
+        "source": "mul_mat_vec_f32_batched.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "constants_size": 128,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_f32_batched_rows2_cols8_f32",
         "source": "mul_mat_vec_f32_batched.hip.cpp",
         "format": None,
         "binding_count": 3,
@@ -614,6 +912,7 @@ KERNELS = [
         "binding_count": 6,
         "constants_size": 200,
         "workgroup_size": (256, 1, 1),
+        "arch_prefixes": ("gfx11",),
     },
     {
         "name": "hrx_flash_attn_ext_f32_f16_prefill_direct",
@@ -622,6 +921,7 @@ KERNELS = [
         "binding_count": 6,
         "constants_size": 200,
         "workgroup_size": (256, 1, 1),
+        "arch_prefixes": ("gfx11",),
     },
     {
         "name": "hrx_flash_attn_ext_f32_bf16_decode",
@@ -713,6 +1013,16 @@ KERNELS = [
     },
 ]
 
+DOT8_ARCH_PREFIXES = ("gfx11",)
+DOT8_SOURCES = {
+    "mul_mat_id_q4_k_q8_1_x4_mmq.hip.cpp",
+    "mul_mat_vec_q5_k_q8_1.hip.cpp",
+    "mul_mat_vec_q5_k_q8_1_wave64.hip.cpp",
+    "mul_mat_vec_q6_k_q8_1.hip.cpp",
+    "mul_mat_vec_q6_k_q8_1_wave64.hip.cpp",
+    "mul_mat_vec_q8_0.hip.cpp",
+}
+
 
 def hsaco_name_for_source(source):
     if source.endswith(".hip.cpp"):
@@ -726,6 +1036,11 @@ def symbol_part(value):
 
 def unique_sources():
     return sorted({kernel["source"] for kernel in KERNELS})
+
+
+def kernel_supports_arch(kernel, arch):
+    prefixes = DOT8_ARCH_PREFIXES if kernel["source"] in DOT8_SOURCES else kernel.get("arch_prefixes")
+    return not prefixes or any(arch.startswith(prefix) for prefix in prefixes)
 
 
 def write_catalog(output, entries):
@@ -818,6 +1133,8 @@ def main():
     hsaco_cache = {}
     for arch in args.arch:
         for kernel in KERNELS:
+            if not kernel_supports_arch(kernel, arch):
+                continue
             source = kernel["source"]
             key = (arch, source)
             if key not in hsaco_cache:
