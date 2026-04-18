@@ -14,6 +14,87 @@ KERNELS = [
         "constants_size": 8,
         "workgroup_size": (256, 1, 1),
     },
+    {
+        "name": "hrx_mul_f32",
+        "source": "mul_f32.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "constants_size": 8,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_add_f32_broadcast",
+        "source": "add_f32_broadcast.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "constants_size": 112,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_mul_f32_broadcast",
+        "source": "mul_f32_broadcast.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "constants_size": 112,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_div_f32_broadcast",
+        "source": "div_f32_broadcast.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "constants_size": 112,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_scale_f32",
+        "source": "scale_f32.hip.cpp",
+        "format": None,
+        "binding_count": 2,
+        "parameter_count": 5,
+        "constants_size": 16,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_silu_f32",
+        "source": "unary_f32.hip.cpp",
+        "format": None,
+        "binding_count": 2,
+        "constants_size": 8,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_sigmoid_f32",
+        "source": "unary_f32.hip.cpp",
+        "format": None,
+        "binding_count": 2,
+        "constants_size": 8,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_softplus_f32",
+        "source": "unary_f32.hip.cpp",
+        "format": None,
+        "binding_count": 2,
+        "constants_size": 8,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_swiglu_f32",
+        "source": "unary_f32.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "constants_size": 8,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_clamp_f32",
+        "source": "clamp_f32.hip.cpp",
+        "format": None,
+        "binding_count": 2,
+        "constants_size": 16,
+        "workgroup_size": (256, 1, 1),
+    },
 ]
 
 
@@ -63,6 +144,7 @@ def write_catalog(output, entries):
             f.write(f"        sizeof({entry['data_symbol']}),\n")
             f.write(f"        {executable_format_c},\n")
             f.write(f"        {entry['binding_count']},\n")
+            f.write(f"        {entry['parameter_count']},\n")
             f.write(f"        {entry['constants_size']},\n")
             f.write(f"        {{ {wx}, {wy}, {wz} }},\n")
             f.write("    },\n")
@@ -134,6 +216,7 @@ def main():
 
             entry = dict(kernel)
             entry["gfx_target"] = arch
+            entry["parameter_count"] = kernel.get("parameter_count", kernel["binding_count"] + 1)
             entry["data_symbol"] = hsaco_cache[key]["symbol"]
             entry["data"] = hsaco_cache[key]["data"]
             entries.append(entry)

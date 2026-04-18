@@ -10,6 +10,7 @@ struct ggml_hrx_kernel_entry {
     size_t data_size;
     const char * format;
     uint32_t binding_count;
+    uint32_t parameter_count;
     uint32_t constants_size;
     uint32_t workgroup_size[3];
 };

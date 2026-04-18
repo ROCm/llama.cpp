@@ -31,7 +31,15 @@ set(GGML_HRX_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(GGML_HRX_HSACO_ROOT "${GGML_HRX_GENERATED_DIR}/hsaco")
 set(GGML_HRX_KERNEL_CATALOG_CPP "${GGML_HRX_GENERATED_DIR}/hrx_kernel_catalog.cpp")
 set(GGML_HRX_KERNEL_GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/kernels/generate_hrx_kernels.py")
-set(GGML_HRX_KERNEL_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/kernels/add_f32.hip.cpp")
+set(GGML_HRX_KERNEL_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/add_f32.hip.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/add_f32_broadcast.hip.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/clamp_f32.hip.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/div_f32_broadcast.hip.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_f32.hip.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_f32_broadcast.hip.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/scale_f32.hip.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/unary_f32.hip.cpp")
 file(MAKE_DIRECTORY "${GGML_HRX_GENERATED_DIR}" "${GGML_HRX_HSACO_ROOT}")
 
 set(GGML_HRX_HSACO_OUTPUTS)
@@ -42,22 +50,26 @@ foreach(GGML_HRX_AMDGPU_TARGET IN LISTS GGML_HRX_AMDGPU_TARGET_LIST)
     endif()
 
     set(GGML_HRX_HSACO_DIR "${GGML_HRX_HSACO_ROOT}/${GGML_HRX_AMDGPU_TARGET}")
-    set(GGML_HRX_HSACO_OUTPUT "${GGML_HRX_HSACO_DIR}/add_f32.hsaco")
     file(MAKE_DIRECTORY "${GGML_HRX_HSACO_DIR}")
-    add_custom_command(
-        OUTPUT "${GGML_HRX_HSACO_OUTPUT}"
-        COMMAND "${GGML_HRX_CLANGXX}"
-            -x hip
-            --offload-device-only
-            --no-gpu-bundle-output
-            "--offload-arch=${GGML_HRX_AMDGPU_TARGET}"
-            -O2
-            -c "${GGML_HRX_KERNEL_SOURCE}"
-            -o "${GGML_HRX_HSACO_OUTPUT}"
-        DEPENDS "${GGML_HRX_KERNEL_SOURCE}"
-        VERBATIM
-    )
-    list(APPEND GGML_HRX_HSACO_OUTPUTS "${GGML_HRX_HSACO_OUTPUT}")
+    foreach(GGML_HRX_KERNEL_SOURCE IN LISTS GGML_HRX_KERNEL_SOURCES)
+        get_filename_component(GGML_HRX_KERNEL_SOURCE_NAME "${GGML_HRX_KERNEL_SOURCE}" NAME)
+        string(REPLACE ".hip.cpp" ".hsaco" GGML_HRX_HSACO_NAME "${GGML_HRX_KERNEL_SOURCE_NAME}")
+        set(GGML_HRX_HSACO_OUTPUT "${GGML_HRX_HSACO_DIR}/${GGML_HRX_HSACO_NAME}")
+        add_custom_command(
+            OUTPUT "${GGML_HRX_HSACO_OUTPUT}"
+            COMMAND "${GGML_HRX_CLANGXX}"
+                -x hip
+                --offload-device-only
+                --no-gpu-bundle-output
+                "--offload-arch=${GGML_HRX_AMDGPU_TARGET}"
+                -O2
+                -c "${GGML_HRX_KERNEL_SOURCE}"
+                -o "${GGML_HRX_HSACO_OUTPUT}"
+            DEPENDS "${GGML_HRX_KERNEL_SOURCE}"
+            VERBATIM
+        )
+        list(APPEND GGML_HRX_HSACO_OUTPUTS "${GGML_HRX_HSACO_OUTPUT}")
+    endforeach()
     list(APPEND GGML_HRX_CATALOG_ARCH_ARGS --arch "${GGML_HRX_AMDGPU_TARGET}")
 endforeach()
 
