@@ -348,6 +348,7 @@ struct ggml_backend_hrx_device_context {
     ggml_backend_hrx_op_provider clamp_provider;
     ggml_backend_hrx_op_provider get_rows_f32_provider;
     ggml_backend_hrx_op_provider get_rows_f32_nr1_provider;
+    ggml_backend_hrx_op_provider get_rows_q5_k_provider;
     ggml_backend_hrx_op_provider concat_f32_provider;
     ggml_backend_hrx_op_provider copy_strided_f32_provider;
     ggml_backend_hrx_op_provider copy_f32_f16_provider;
@@ -383,6 +384,7 @@ static void ggml_backend_hrx_reset_providers(ggml_backend_hrx_device_context * d
     device_context->clamp_provider.reset();
     device_context->get_rows_f32_provider.reset();
     device_context->get_rows_f32_nr1_provider.reset();
+    device_context->get_rows_q5_k_provider.reset();
     device_context->concat_f32_provider.reset();
     device_context->copy_strided_f32_provider.reset();
     device_context->copy_f32_f16_provider.reset();
@@ -1255,6 +1257,11 @@ static bool ggml_backend_hrx_load_get_rows_f32_provider(ggml_backend_hrx_device_
     return ok;
 }
 
+static bool ggml_backend_hrx_load_get_rows_q5_k_provider(ggml_backend_hrx_device_context * device_context) {
+    return ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_get_rows_q5_k_f32", &device_context->get_rows_q5_k_provider);
+}
+
 static bool ggml_backend_hrx_load_concat_f32_provider(ggml_backend_hrx_device_context * device_context) {
     return ggml_backend_hrx_load_catalog_provider(device_context, "hrx_concat_f32", &device_context->concat_f32_provider);
 }
@@ -1801,9 +1808,14 @@ static bool ggml_backend_hrx_supports_get_rows_f32(
         const ggml_tensor * op) {
     const ggml_tensor * src0 = op->src[0];
     const ggml_tensor * src1 = op->src[1];
-    return device_context->get_rows_f32_provider.kind == ggml_backend_hrx_provider_kind::hsaco &&
+    const bool has_provider =
+        (src0 && src0->type == GGML_TYPE_F32 &&
+         device_context->get_rows_f32_provider.kind == ggml_backend_hrx_provider_kind::hsaco) ||
+        (src0 && src0->type == GGML_TYPE_Q5_K &&
+         device_context->get_rows_q5_k_provider.kind == ggml_backend_hrx_provider_kind::hsaco);
+    return has_provider &&
            src0 && src1 &&
-           src0->type == GGML_TYPE_F32 &&
+           (src0->type == GGML_TYPE_F32 || src0->type == GGML_TYPE_Q5_K) &&
            src1->type == GGML_TYPE_I32 &&
            op->type == GGML_TYPE_F32 &&
            op->ne[0] == src0->ne[0] &&
@@ -1811,7 +1823,7 @@ static bool ggml_backend_hrx_supports_get_rows_f32(
            op->ne[3] == src1->ne[2] &&
            src0->ne[2] == src1->ne[1] &&
            src0->ne[3] == src1->ne[2] &&
-           src0->nb[0] == sizeof(float) &&
+           (src0->type == GGML_TYPE_Q5_K || src0->nb[0] == sizeof(float)) &&
            src1->nb[0] == sizeof(int32_t) &&
            op->nb[0] == sizeof(float);
 }
@@ -2671,11 +2683,14 @@ static ggml_status ggml_backend_hrx_dispatch_get_rows_f32(
     };
 
     const bool use_nr1 =
+        src0->type == GGML_TYPE_F32 &&
         constants.nr == 1 &&
         context->device_context->get_rows_f32_nr1_provider.kind == ggml_backend_hrx_provider_kind::hsaco;
-    const auto & provider = use_nr1 ?
-        context->device_context->get_rows_f32_nr1_provider :
-        context->device_context->get_rows_f32_provider;
+    const auto & provider = src0->type == GGML_TYPE_Q5_K ?
+        context->device_context->get_rows_q5_k_provider :
+        (use_nr1 ?
+            context->device_context->get_rows_f32_nr1_provider :
+            context->device_context->get_rows_f32_provider);
     const uint32_t workgroup_size = provider.export_info.workgroup_size[0] ?
         provider.export_info.workgroup_size[0] : 256;
     hrx_dispatch_config_t config = {
@@ -3518,6 +3533,7 @@ static std::unique_ptr<ggml_backend_hrx_reg_context> ggml_backend_hrx_create_reg
         (void) ggml_backend_hrx_load_l2_norm_provider(device_context.get());
         (void) ggml_backend_hrx_load_clamp_provider(device_context.get());
         (void) ggml_backend_hrx_load_get_rows_f32_provider(device_context.get());
+        (void) ggml_backend_hrx_load_get_rows_q5_k_provider(device_context.get());
         (void) ggml_backend_hrx_load_concat_f32_provider(device_context.get());
         (void) ggml_backend_hrx_load_copy_strided_f32_provider(device_context.get());
         (void) ggml_backend_hrx_load_copy_f32_f16_provider(device_context.get());

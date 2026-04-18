@@ -224,6 +224,14 @@ KERNELS = [
         "workgroup_size": (256, 1, 1),
     },
     {
+        "name": "hrx_get_rows_q5_k_f32",
+        "source": "get_rows_q5_k.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "constants_size": 104,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
         "name": "hrx_concat_f32",
         "source": "concat_f32.hip.cpp",
         "format": None,

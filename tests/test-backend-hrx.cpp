@@ -463,6 +463,74 @@ static void run_get_rows_case(ggml_backend_t backend, int64_t rows_to_get) {
     expect_eq(tensor_to_float(out), expected, rows_to_get == 1 ? "get_rows_nr1" : "get_rows");
 }
 
+static void run_get_rows_q5_k_case(
+        ggml_backend_t backend,
+        int64_t ncols,
+        int64_t src_rows,
+        int64_t rows_to_get,
+        int64_t batches) {
+    const int64_t block_size = ggml_blck_size(GGML_TYPE_Q5_K);
+    GGML_ASSERT(ncols % block_size == 0);
+
+    ggml_context_ptr ctx = make_context();
+    ggml_tensor * src = ggml_new_tensor_3d(ctx.get(), GGML_TYPE_Q5_K, ncols, src_rows, batches);
+    ggml_tensor * rows = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_I32, rows_to_get, batches);
+    ggml_tensor * out = ggml_get_rows(ctx.get(), src, rows);
+
+    ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 16, false);
+    ggml_build_forward_expand(graph, out);
+
+    ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
+    GGML_ASSERT(buffer != nullptr);
+
+    const size_t row_bytes = ggml_row_size(GGML_TYPE_Q5_K, ncols);
+    const ggml_type_traits * traits = ggml_get_type_traits(GGML_TYPE_Q5_K);
+    GGML_ASSERT(traits->from_float_ref != nullptr);
+    GGML_ASSERT(traits->to_float != nullptr);
+    std::vector<float> src_f32(static_cast<size_t>(ncols * src_rows * batches));
+    std::vector<float> src_dequant(src_f32.size());
+    std::vector<uint8_t> src_q5(row_bytes * static_cast<size_t>(src_rows * batches));
+    for (int64_t batch = 0; batch < batches; ++batch) {
+        for (int64_t row = 0; row < src_rows; ++row) {
+            const int64_t row_offset = (batch * src_rows + row) * ncols;
+            for (int64_t col = 0; col < ncols; ++col) {
+                const int64_t i = row_offset + col;
+                src_f32[static_cast<size_t>(i)] =
+                    static_cast<float>(static_cast<int>((i * 17 + batch * 13 + row * 7) % 97) - 48) / 19.0f;
+            }
+            uint8_t * q5_row = src_q5.data() + row_bytes * static_cast<size_t>(batch * src_rows + row);
+            traits->from_float_ref(src_f32.data() + row_offset, q5_row, ncols);
+            traits->to_float(q5_row, src_dequant.data() + row_offset, ncols);
+        }
+    }
+
+    std::vector<int32_t> row_data(static_cast<size_t>(rows_to_get * batches));
+    for (int64_t batch = 0; batch < batches; ++batch) {
+        for (int64_t row = 0; row < rows_to_get; ++row) {
+            row_data[static_cast<size_t>(batch * rows_to_get + row)] =
+                static_cast<int32_t>((row * 3 + batch + 1) % src_rows);
+        }
+    }
+
+    ggml_backend_tensor_set(src, src_q5.data(), 0, src_q5.size());
+    ggml_backend_tensor_set(rows, row_data.data(), 0, row_data.size() * sizeof(int32_t));
+    GGML_ASSERT(ggml_backend_graph_compute(backend, graph) == GGML_STATUS_SUCCESS);
+
+    std::vector<float> expected;
+    expected.reserve(static_cast<size_t>(ncols * rows_to_get * batches));
+    for (int64_t batch = 0; batch < batches; ++batch) {
+        for (int64_t row = 0; row < rows_to_get; ++row) {
+            const int64_t selected = row_data[static_cast<size_t>(batch * rows_to_get + row)];
+            const int64_t row_offset = (batch * src_rows + selected) * ncols;
+            expected.insert(
+                expected.end(),
+                src_dequant.begin() + row_offset,
+                src_dequant.begin() + row_offset + ncols);
+        }
+    }
+    expect_eq(tensor_to_float(out), expected, "get_rows_q5_k");
+}
+
 static void run_concat_case(ggml_backend_t backend) {
     ggml_context_ptr ctx = make_context();
     ggml_tensor * lhs = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, 3, 2);
@@ -1120,6 +1188,8 @@ int main() {
     run_set_rows_case(backend.get(), GGML_TYPE_Q4_0);
     run_get_rows_case(backend.get(), 1);
     run_get_rows_case(backend.get(), 3);
+    run_get_rows_q5_k_case(backend.get(), ggml_blck_size(GGML_TYPE_Q5_K), 4, 1, 2);
+    run_get_rows_q5_k_case(backend.get(), 2 * ggml_blck_size(GGML_TYPE_Q5_K), 5, 3, 2);
     run_concat_case(backend.get());
     run_argsort_case(backend.get(), 1, 3, GGML_SORT_ORDER_ASC);
     run_argsort_case(backend.get(), 255, 2, GGML_SORT_ORDER_ASC);
