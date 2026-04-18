@@ -7,6 +7,14 @@ import sys
 
 KERNELS = [
     {
+        "name": "hrx_rms_norm_f32",
+        "source": "rms_norm.hip.cpp",
+        "format": None,
+        "binding_count": 2,
+        "constants_size": 88,
+        "workgroup_size": (512, 1, 1),
+    },
+    {
         "name": "hrx_add_f32",
         "source": "add_f32.hip.cpp",
         "format": None,
@@ -118,6 +126,30 @@ KERNELS = [
         "binding_count": 3,
         "constants_size": 8,
         "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_sum_rows_f32",
+        "source": "row_reduce_f32.hip.cpp",
+        "format": None,
+        "binding_count": 2,
+        "constants_size": 88,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_l2_norm_f32",
+        "source": "row_reduce_f32.hip.cpp",
+        "format": None,
+        "binding_count": 2,
+        "constants_size": 88,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_l2_norm_wg128_f32",
+        "source": "row_reduce_f32.hip.cpp",
+        "format": None,
+        "binding_count": 2,
+        "constants_size": 88,
+        "workgroup_size": (128, 1, 1),
     },
     {
         "name": "hrx_clamp_f32",

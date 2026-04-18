@@ -74,6 +74,40 @@ struct ggml_backend_hrx_elementwise_constants {
 
 static_assert(sizeof(ggml_backend_hrx_elementwise_constants) == 8);
 
+struct ggml_backend_hrx_rms_norm_constants {
+    int64_t ncols;
+    int64_t nrows;
+    int64_t ne1;
+    int64_t ne2;
+    int64_t src_nb1;
+    int64_t src_nb2;
+    int64_t src_nb3;
+    int64_t dst_nb1;
+    int64_t dst_nb2;
+    int64_t dst_nb3;
+    float eps;
+    int32_t _pad;
+};
+
+static_assert(sizeof(ggml_backend_hrx_rms_norm_constants) == 88);
+
+struct ggml_backend_hrx_row_reduce_constants {
+    int64_t ncols;
+    int64_t nrows;
+    int64_t ne1;
+    int64_t ne2;
+    int64_t src_nb1;
+    int64_t src_nb2;
+    int64_t src_nb3;
+    int64_t dst_nb1;
+    int64_t dst_nb2;
+    int64_t dst_nb3;
+    float eps;
+    int32_t _pad;
+};
+
+static_assert(sizeof(ggml_backend_hrx_row_reduce_constants) == 88);
+
 struct ggml_backend_hrx_broadcast_constants {
     int64_t ne0;
     int64_t nrows;
@@ -192,6 +226,7 @@ struct ggml_backend_hrx_device_context {
     std::string description;
     std::string architecture;
     size_t memory_total = 0;
+    ggml_backend_hrx_op_provider rms_norm_provider;
     ggml_backend_hrx_op_provider add_provider;
     ggml_backend_hrx_op_provider mul_provider;
     ggml_backend_hrx_op_provider add_broadcast_provider;
@@ -206,6 +241,9 @@ struct ggml_backend_hrx_device_context {
     ggml_backend_hrx_op_provider sigmoid_provider;
     ggml_backend_hrx_op_provider softplus_provider;
     ggml_backend_hrx_op_provider swiglu_provider;
+    ggml_backend_hrx_op_provider sum_rows_provider;
+    ggml_backend_hrx_op_provider l2_norm_provider;
+    ggml_backend_hrx_op_provider l2_norm_wg128_provider;
     ggml_backend_hrx_op_provider clamp_provider;
     ggml_backend_hrx_op_provider get_rows_f32_provider;
     ggml_backend_hrx_op_provider get_rows_f32_nr1_provider;
@@ -217,6 +255,7 @@ struct ggml_backend_hrx_device_context {
 static void ggml_backend_hrx_unregister_stream(ggml_backend_hrx_device_context * device_context, hrx_stream_t stream);
 
 static void ggml_backend_hrx_reset_providers(ggml_backend_hrx_device_context * device_context) {
+    device_context->rms_norm_provider.reset();
     device_context->add_provider.reset();
     device_context->mul_provider.reset();
     device_context->add_broadcast_provider.reset();
@@ -231,6 +270,9 @@ static void ggml_backend_hrx_reset_providers(ggml_backend_hrx_device_context * d
     device_context->sigmoid_provider.reset();
     device_context->softplus_provider.reset();
     device_context->swiglu_provider.reset();
+    device_context->sum_rows_provider.reset();
+    device_context->l2_norm_provider.reset();
+    device_context->l2_norm_wg128_provider.reset();
     device_context->clamp_provider.reset();
     device_context->get_rows_f32_provider.reset();
     device_context->get_rows_f32_nr1_provider.reset();
@@ -1016,6 +1058,10 @@ static bool ggml_backend_hrx_load_catalog_provider(
     return true;
 }
 
+static bool ggml_backend_hrx_load_rms_norm_provider(ggml_backend_hrx_device_context * device_context) {
+    return ggml_backend_hrx_load_catalog_provider(device_context, "hrx_rms_norm_f32", &device_context->rms_norm_provider);
+}
+
 static bool ggml_backend_hrx_load_add_provider(ggml_backend_hrx_device_context * device_context) {
     return ggml_backend_hrx_load_catalog_provider(device_context, "hrx_add_f32", &device_context->add_provider);
 }
@@ -1070,6 +1116,18 @@ static bool ggml_backend_hrx_load_softplus_provider(ggml_backend_hrx_device_cont
 
 static bool ggml_backend_hrx_load_swiglu_provider(ggml_backend_hrx_device_context * device_context) {
     return ggml_backend_hrx_load_catalog_provider(device_context, "hrx_swiglu_f32", &device_context->swiglu_provider);
+}
+
+static bool ggml_backend_hrx_load_sum_rows_provider(ggml_backend_hrx_device_context * device_context) {
+    return ggml_backend_hrx_load_catalog_provider(device_context, "hrx_sum_rows_f32", &device_context->sum_rows_provider);
+}
+
+static bool ggml_backend_hrx_load_l2_norm_provider(ggml_backend_hrx_device_context * device_context) {
+    bool ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_l2_norm_f32", &device_context->l2_norm_provider);
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_l2_norm_wg128_f32", &device_context->l2_norm_wg128_provider) || ok;
+    return ok;
 }
 
 static bool ggml_backend_hrx_load_clamp_provider(ggml_backend_hrx_device_context * device_context) {
@@ -1330,6 +1388,20 @@ static bool ggml_backend_hrx_approximate_kernels_disabled() {
     return ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_FAST_APPROX_PROMPT");
 }
 
+static bool ggml_backend_hrx_supports_rms_norm(
+        const ggml_backend_hrx_device_context * device_context,
+        const ggml_tensor * op) {
+    const ggml_tensor * src0 = op->src[0];
+    return !ggml_backend_hrx_approximate_kernels_disabled() &&
+           device_context->rms_norm_provider.kind == ggml_backend_hrx_provider_kind::hsaco &&
+           src0 &&
+           src0->type == GGML_TYPE_F32 &&
+           op->type == GGML_TYPE_F32 &&
+           src0->nb[0] == sizeof(float) &&
+           op->nb[0] == sizeof(float) &&
+           ggml_are_same_shape(src0, op);
+}
+
 static bool ggml_backend_hrx_supports_binary_elementwise(
         const ggml_backend_hrx_op_provider & provider,
         const ggml_tensor * op) {
@@ -1454,6 +1526,44 @@ static bool ggml_backend_hrx_supports_swiglu_f32(
            ggml_is_contiguous(src0) &&
            ggml_is_contiguous(src1) &&
            ggml_is_contiguous(op);
+}
+
+static bool ggml_backend_hrx_supports_sum_rows(
+        const ggml_backend_hrx_device_context * device_context,
+        const ggml_tensor * op) {
+    const ggml_tensor * src0 = op->src[0];
+    return !ggml_backend_hrx_approximate_kernels_disabled() &&
+           device_context->sum_rows_provider.kind == ggml_backend_hrx_provider_kind::hsaco &&
+           src0 &&
+           src0->type == GGML_TYPE_F32 &&
+           op->type == GGML_TYPE_F32 &&
+           op->ne[0] == 1 &&
+           op->ne[1] == src0->ne[1] &&
+           op->ne[2] == src0->ne[2] &&
+           op->ne[3] == src0->ne[3] &&
+           src0->nb[0] == sizeof(float) &&
+           op->nb[0] == sizeof(float);
+}
+
+static bool ggml_backend_hrx_supports_l2_norm(
+        const ggml_backend_hrx_device_context * device_context,
+        const ggml_tensor * op) {
+    const ggml_tensor * src0 = op->src[0];
+    if (ggml_backend_hrx_approximate_kernels_disabled() ||
+        !src0 ||
+        src0->type != GGML_TYPE_F32 ||
+        op->type != GGML_TYPE_F32 ||
+        !ggml_are_same_shape(src0, op) ||
+        src0->nb[0] != sizeof(float) ||
+        op->nb[0] != sizeof(float)) {
+        return false;
+    }
+
+    if (src0->ne[0] <= 128 &&
+        device_context->l2_norm_wg128_provider.kind == ggml_backend_hrx_provider_kind::hsaco) {
+        return true;
+    }
+    return device_context->l2_norm_provider.kind == ggml_backend_hrx_provider_kind::hsaco;
 }
 
 static bool ggml_backend_hrx_supports_clamp(
@@ -1771,6 +1881,164 @@ static ggml_status ggml_backend_hrx_dispatch_swiglu_f32(
             sizeof(n),
             bindings,
             3,
+            HRX_DISPATCH_FLAG_NONE))) {
+        return GGML_STATUS_FAILED;
+    }
+    return GGML_STATUS_SUCCESS;
+}
+
+static ggml_status ggml_backend_hrx_dispatch_rms_norm(
+        ggml_backend_hrx_context * context,
+        const ggml_tensor * dst) {
+    const ggml_tensor * src0 = dst->src[0];
+    hrx_buffer_ref_t bindings[2] = {};
+    if (!ggml_backend_hrx_tensor_buffer_ref(src0, &bindings[0]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(dst, &bindings[1])) {
+        GGML_LOG_ERROR("%s: RMS_NORM tensor is not backed by a HRX buffer\n", __func__);
+        return GGML_STATUS_FAILED;
+    }
+
+    float eps = 0.0f;
+    std::memcpy(&eps, dst->op_params, sizeof(eps));
+    ggml_backend_hrx_rms_norm_constants constants = {
+        /* .ncols   = */ src0->ne[0],
+        /* .nrows   = */ ggml_nrows(src0),
+        /* .ne1     = */ src0->ne[1],
+        /* .ne2     = */ src0->ne[2],
+        /* .src_nb1 = */ static_cast<int64_t>(src0->nb[1]),
+        /* .src_nb2 = */ static_cast<int64_t>(src0->nb[2]),
+        /* .src_nb3 = */ static_cast<int64_t>(src0->nb[3]),
+        /* .dst_nb1 = */ static_cast<int64_t>(dst->nb[1]),
+        /* .dst_nb2 = */ static_cast<int64_t>(dst->nb[2]),
+        /* .dst_nb3 = */ static_cast<int64_t>(dst->nb[3]),
+        /* .eps     = */ eps,
+        /* ._pad    = */ 0,
+    };
+
+    const auto & provider = context->device_context->rms_norm_provider;
+    const uint32_t workgroup_size = provider.export_info.workgroup_size[0] ?
+        provider.export_info.workgroup_size[0] : 512;
+    hrx_dispatch_config_t config = {
+        /* .workgroup_count = */ { static_cast<uint32_t>(constants.nrows), 1, 1 },
+        /* .workgroup_size = */ { workgroup_size, 1, 1 },
+        /* .subgroup_size = */ 0,
+    };
+
+    if (!GGML_HRX_CHECK(hrx_stream_dispatch(
+            context->stream,
+            provider.executable,
+            provider.export_ordinal,
+            &config,
+            &constants,
+            sizeof(constants),
+            bindings,
+            2,
+            HRX_DISPATCH_FLAG_NONE))) {
+        return GGML_STATUS_FAILED;
+    }
+    return GGML_STATUS_SUCCESS;
+}
+
+static ggml_backend_hrx_row_reduce_constants ggml_backend_hrx_row_reduce_constants_for(
+        const ggml_tensor * dst,
+        float eps) {
+    const ggml_tensor * src0 = dst->src[0];
+    return {
+        /* .ncols   = */ src0->ne[0],
+        /* .nrows   = */ ggml_nrows(src0),
+        /* .ne1     = */ src0->ne[1],
+        /* .ne2     = */ src0->ne[2],
+        /* .src_nb1 = */ static_cast<int64_t>(src0->nb[1]),
+        /* .src_nb2 = */ static_cast<int64_t>(src0->nb[2]),
+        /* .src_nb3 = */ static_cast<int64_t>(src0->nb[3]),
+        /* .dst_nb1 = */ static_cast<int64_t>(dst->nb[1]),
+        /* .dst_nb2 = */ static_cast<int64_t>(dst->nb[2]),
+        /* .dst_nb3 = */ static_cast<int64_t>(dst->nb[3]),
+        /* .eps     = */ eps,
+        /* ._pad    = */ 0,
+    };
+}
+
+static ggml_status ggml_backend_hrx_dispatch_sum_rows(
+        ggml_backend_hrx_context * context,
+        const ggml_tensor * dst) {
+    const ggml_tensor * src0 = dst->src[0];
+    hrx_buffer_ref_t bindings[2] = {};
+    if (!ggml_backend_hrx_tensor_buffer_ref(src0, &bindings[0]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(dst, &bindings[1])) {
+        GGML_LOG_ERROR("%s: SUM_ROWS tensor is not backed by a HRX buffer\n", __func__);
+        return GGML_STATUS_FAILED;
+    }
+
+    ggml_backend_hrx_row_reduce_constants constants =
+        ggml_backend_hrx_row_reduce_constants_for(dst, 0.0f);
+    const auto & provider = context->device_context->sum_rows_provider;
+    const uint32_t workgroup_size = provider.export_info.workgroup_size[0] ?
+        provider.export_info.workgroup_size[0] : 256;
+    hrx_dispatch_config_t config = {
+        /* .workgroup_count = */ { static_cast<uint32_t>(constants.nrows), 1, 1 },
+        /* .workgroup_size = */ { workgroup_size, 1, 1 },
+        /* .subgroup_size = */ 0,
+    };
+
+    if (!GGML_HRX_CHECK(hrx_stream_dispatch(
+            context->stream,
+            provider.executable,
+            provider.export_ordinal,
+            &config,
+            &constants,
+            sizeof(constants),
+            bindings,
+            2,
+            HRX_DISPATCH_FLAG_NONE))) {
+        return GGML_STATUS_FAILED;
+    }
+    return GGML_STATUS_SUCCESS;
+}
+
+static ggml_status ggml_backend_hrx_dispatch_l2_norm(
+        ggml_backend_hrx_context * context,
+        const ggml_tensor * dst) {
+    const ggml_tensor * src0 = dst->src[0];
+    hrx_buffer_ref_t bindings[2] = {};
+    if (!ggml_backend_hrx_tensor_buffer_ref(src0, &bindings[0]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(dst, &bindings[1])) {
+        GGML_LOG_ERROR("%s: L2_NORM tensor is not backed by a HRX buffer\n", __func__);
+        return GGML_STATUS_FAILED;
+    }
+
+    float eps = 0.0f;
+    std::memcpy(&eps, dst->op_params, sizeof(eps));
+    ggml_backend_hrx_row_reduce_constants constants =
+        ggml_backend_hrx_row_reduce_constants_for(dst, eps);
+    const bool use_wg128 =
+        constants.ncols <= 128 &&
+        context->device_context->l2_norm_wg128_provider.kind == ggml_backend_hrx_provider_kind::hsaco;
+    const auto & provider = use_wg128 ?
+        context->device_context->l2_norm_wg128_provider :
+        context->device_context->l2_norm_provider;
+    if (provider.kind != ggml_backend_hrx_provider_kind::hsaco) {
+        GGML_LOG_ERROR("%s: L2_NORM provider is unavailable for row length %" PRId64 "\n",
+                __func__, constants.ncols);
+        return GGML_STATUS_FAILED;
+    }
+    const uint32_t workgroup_size = provider.export_info.workgroup_size[0] ?
+        provider.export_info.workgroup_size[0] : (use_wg128 ? 128 : 256);
+    hrx_dispatch_config_t config = {
+        /* .workgroup_count = */ { static_cast<uint32_t>(constants.nrows), 1, 1 },
+        /* .workgroup_size = */ { workgroup_size, 1, 1 },
+        /* .subgroup_size = */ 0,
+    };
+
+    if (!GGML_HRX_CHECK(hrx_stream_dispatch(
+            context->stream,
+            provider.executable,
+            provider.export_ordinal,
+            &config,
+            &constants,
+            sizeof(constants),
+            bindings,
+            2,
             HRX_DISPATCH_FLAG_NONE))) {
         return GGML_STATUS_FAILED;
     }
@@ -2202,6 +2470,15 @@ static ggml_status ggml_backend_hrx_graph_compute(ggml_backend_t backend, ggml_c
             case GGML_OP_PERMUTE:
             case GGML_OP_TRANSPOSE:
                 break;
+            case GGML_OP_RMS_NORM:
+                if (!ggml_backend_hrx_supports_rms_norm(context->device_context, node)) {
+                    GGML_LOG_ERROR("%s: RMS_NORM shape/type/layout is unsupported\n", __func__);
+                    return GGML_STATUS_FAILED;
+                }
+                if (ggml_backend_hrx_dispatch_rms_norm(context, node) != GGML_STATUS_SUCCESS) {
+                    return GGML_STATUS_FAILED;
+                }
+                break;
             case GGML_OP_ADD:
                 if (!ggml_backend_hrx_supports_add(context->device_context, node)) {
                     GGML_LOG_ERROR("%s: ADD shape/type/layout is unsupported\n", __func__);
@@ -2306,6 +2583,24 @@ static ggml_status ggml_backend_hrx_graph_compute(ggml_backend_t backend, ggml_c
                     return GGML_STATUS_FAILED;
                 }
                 if (ggml_backend_hrx_dispatch_swiglu_f32(context, node) != GGML_STATUS_SUCCESS) {
+                    return GGML_STATUS_FAILED;
+                }
+                break;
+            case GGML_OP_SUM_ROWS:
+                if (!ggml_backend_hrx_supports_sum_rows(context->device_context, node)) {
+                    GGML_LOG_ERROR("%s: SUM_ROWS shape/type/layout is unsupported\n", __func__);
+                    return GGML_STATUS_FAILED;
+                }
+                if (ggml_backend_hrx_dispatch_sum_rows(context, node) != GGML_STATUS_SUCCESS) {
+                    return GGML_STATUS_FAILED;
+                }
+                break;
+            case GGML_OP_L2_NORM:
+                if (!ggml_backend_hrx_supports_l2_norm(context->device_context, node)) {
+                    GGML_LOG_ERROR("%s: L2_NORM shape/type/layout is unsupported\n", __func__);
+                    return GGML_STATUS_FAILED;
+                }
+                if (ggml_backend_hrx_dispatch_l2_norm(context, node) != GGML_STATUS_SUCCESS) {
                     return GGML_STATUS_FAILED;
                 }
                 break;
@@ -2422,6 +2717,8 @@ static bool ggml_backend_hrx_device_supports_op(ggml_backend_dev_t dev, const gg
         case GGML_OP_PERMUTE:
         case GGML_OP_TRANSPOSE:
             return true;
+        case GGML_OP_RMS_NORM:
+            return ggml_backend_hrx_supports_rms_norm(ggml_backend_hrx_get_device_context(dev), op);
         case GGML_OP_ADD:
             return ggml_backend_hrx_supports_add(ggml_backend_hrx_get_device_context(dev), op);
         case GGML_OP_MUL:
@@ -2444,6 +2741,10 @@ static bool ggml_backend_hrx_device_supports_op(ggml_backend_dev_t dev, const gg
             return ggml_backend_hrx_supports_unary_f32(ggml_backend_hrx_get_device_context(dev), op);
         case GGML_OP_GLU:
             return ggml_backend_hrx_supports_swiglu_f32(ggml_backend_hrx_get_device_context(dev), op);
+        case GGML_OP_SUM_ROWS:
+            return ggml_backend_hrx_supports_sum_rows(ggml_backend_hrx_get_device_context(dev), op);
+        case GGML_OP_L2_NORM:
+            return ggml_backend_hrx_supports_l2_norm(ggml_backend_hrx_get_device_context(dev), op);
         case GGML_OP_CLAMP:
             return ggml_backend_hrx_supports_clamp(ggml_backend_hrx_get_device_context(dev), op);
         default:
@@ -2547,6 +2848,7 @@ static std::unique_ptr<ggml_backend_hrx_reg_context> ggml_backend_hrx_create_reg
             continue;
         }
         ggml_backend_hrx_register_stream(device_context.get(), device_context->transfer_stream);
+        (void) ggml_backend_hrx_load_rms_norm_provider(device_context.get());
         (void) ggml_backend_hrx_load_add_provider(device_context.get());
         (void) ggml_backend_hrx_load_mul_provider(device_context.get());
         (void) ggml_backend_hrx_load_add_broadcast_provider(device_context.get());
@@ -2561,6 +2863,8 @@ static std::unique_ptr<ggml_backend_hrx_reg_context> ggml_backend_hrx_create_reg
         (void) ggml_backend_hrx_load_sigmoid_provider(device_context.get());
         (void) ggml_backend_hrx_load_softplus_provider(device_context.get());
         (void) ggml_backend_hrx_load_swiglu_provider(device_context.get());
+        (void) ggml_backend_hrx_load_sum_rows_provider(device_context.get());
+        (void) ggml_backend_hrx_load_l2_norm_provider(device_context.get());
         (void) ggml_backend_hrx_load_clamp_provider(device_context.get());
         (void) ggml_backend_hrx_load_get_rows_f32_provider(device_context.get());
         (void) ggml_backend_hrx_load_concat_f32_provider(device_context.get());

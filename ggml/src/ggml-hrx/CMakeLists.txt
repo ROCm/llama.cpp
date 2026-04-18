@@ -42,6 +42,8 @@ set(GGML_HRX_KERNEL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/get_rows_f32.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_f32.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_f32_broadcast.hip.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/rms_norm.hip.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/row_reduce_f32.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/scale_f32.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/set_rows_f32_f16.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/set_rows_f32_f32.hip.cpp"
