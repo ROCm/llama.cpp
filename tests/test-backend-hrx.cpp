@@ -117,10 +117,10 @@ static std::vector<float> reference_mul_mat(
     return output;
 }
 
-static void prepare_mul_mat_lhs(
+static void prepare_rows(
         ggml_type type,
-        int64_t k,
-        int64_t rows,
+        int64_t ncols,
+        int64_t nrows,
         const std::vector<float> & input,
         std::vector<float> & reference,
         std::vector<uint8_t> & storage) {
@@ -135,14 +135,24 @@ static void prepare_mul_mat_lhs(
     const ggml_type_traits * traits = ggml_get_type_traits(type);
     GGML_ASSERT(traits->from_float_ref != nullptr);
     GGML_ASSERT(traits->to_float != nullptr);
-    const size_t row_bytes = ggml_row_size(type, k);
-    storage.assign(row_bytes * static_cast<size_t>(rows), 0);
-    for (int64_t row = 0; row < rows; ++row) {
-        const int64_t row_offset = row * k;
+    const size_t row_bytes = ggml_row_size(type, ncols);
+    storage.assign(row_bytes * static_cast<size_t>(nrows), 0);
+    for (int64_t row = 0; row < nrows; ++row) {
+        const int64_t row_offset = row * ncols;
         uint8_t * row_data = storage.data() + row_bytes * static_cast<size_t>(row);
-        traits->from_float_ref(input.data() + row_offset, row_data, k);
-        traits->to_float(row_data, reference.data() + row_offset, k);
+        traits->from_float_ref(input.data() + row_offset, row_data, ncols);
+        traits->to_float(row_data, reference.data() + row_offset, ncols);
     }
+}
+
+static void prepare_mul_mat_lhs(
+        ggml_type type,
+        int64_t k,
+        int64_t rows,
+        const std::vector<float> & input,
+        std::vector<float> & reference,
+        std::vector<uint8_t> & storage) {
+    prepare_rows(type, k, rows, input, reference, storage);
 }
 
 static void run_mul_mat_vec_case(
@@ -188,6 +198,164 @@ static void run_mul_mat_vec_case(
     std::vector<float> actual(static_cast<size_t>(rows * cols), -1.0f);
     ggml_backend_tensor_get(out, actual.data(), 0, actual.size() * sizeof(float));
     expect_near(actual, reference_mul_mat(lhs_reference, rhs_f32, k, rows, cols), tolerance, label);
+}
+
+static size_t index_4d(int64_t i0, int64_t i1, int64_t i2, int64_t i3, int64_t ne0, int64_t ne1, int64_t ne2) {
+    return static_cast<size_t>(i0 + ne0 * (i1 + ne1 * (i2 + ne2 * i3)));
+}
+
+static std::vector<float> reference_flash_attn_ext_decode(
+        const std::vector<float> & q,
+        const std::vector<float> & k,
+        const std::vector<float> & v,
+        const std::vector<float> & mask,
+        const std::vector<float> & sinks,
+        int64_t d,
+        int64_t n,
+        int64_t h,
+        int64_t h_kv,
+        int64_t kv,
+        int64_t s,
+        float scale,
+        bool has_mask,
+        bool has_sinks) {
+    std::vector<float> output(static_cast<size_t>(d * h * n * s), 0.0f);
+    std::vector<float> logits(static_cast<size_t>(kv));
+    for (int64_t seq = 0; seq < s; ++seq) {
+        for (int64_t token = 0; token < n; ++token) {
+            for (int64_t head = 0; head < h; ++head) {
+                const int64_t kv_head = head / (h / h_kv);
+                float max_score = has_sinks ? sinks[static_cast<size_t>(head)] : -INFINITY;
+                for (int64_t t = 0; t < kv; ++t) {
+                    float score = 0.0f;
+                    for (int64_t col = 0; col < d; ++col) {
+                        score +=
+                            q[index_4d(col, token, head, seq, d, n, h)] *
+                            k[index_4d(col, t, kv_head, seq, d, kv, h_kv)];
+                    }
+                    score *= scale;
+                    if (has_mask) {
+                        score += mask[index_4d(t, token, 0, seq, kv, n, 1)];
+                    }
+                    logits[static_cast<size_t>(t)] = score;
+                    max_score = std::max(max_score, score);
+                }
+
+                float sum = has_sinks ? std::exp(sinks[static_cast<size_t>(head)] - max_score) : 0.0f;
+                for (int64_t t = 0; t < kv; ++t) {
+                    logits[static_cast<size_t>(t)] = std::exp(logits[static_cast<size_t>(t)] - max_score);
+                    sum += logits[static_cast<size_t>(t)];
+                }
+
+                for (int64_t col = 0; col < d; ++col) {
+                    float value = 0.0f;
+                    for (int64_t t = 0; t < kv; ++t) {
+                        value +=
+                            logits[static_cast<size_t>(t)] *
+                            v[index_4d(col, t, kv_head, seq, d, kv, h_kv)];
+                    }
+                    output[index_4d(col, head, token, seq, d, h, n)] = value / sum;
+                }
+            }
+        }
+    }
+    return output;
+}
+
+static void run_flash_attn_ext_decode_case(
+        ggml_backend_t backend,
+        ggml_backend_dev_t dev,
+        ggml_type k_type,
+        ggml_type v_type,
+        bool mask_enabled,
+        bool sinks_enabled,
+        const char * label) {
+    const int64_t d = 32;
+    const int64_t n = 3;
+    const int64_t h = 4;
+    const int64_t h_kv = 2;
+    const int64_t kv = 5;
+    const int64_t s = 2;
+    GGML_ASSERT(d % ggml_blck_size(k_type) == 0);
+    GGML_ASSERT(d % ggml_blck_size(v_type) == 0);
+
+    ggml_context_ptr ctx = make_context();
+    ggml_tensor * q = ggml_new_tensor_4d(ctx.get(), GGML_TYPE_F32, d, n, h, s);
+    ggml_tensor * k = ggml_new_tensor_4d(ctx.get(), k_type, d, kv, h_kv, s);
+    ggml_tensor * v = ggml_new_tensor_4d(ctx.get(), v_type, d, kv, h_kv, s);
+    ggml_tensor * mask = mask_enabled ? ggml_new_tensor_4d(ctx.get(), GGML_TYPE_F16, kv, n, 1, s) : nullptr;
+    ggml_tensor * sinks = sinks_enabled ? ggml_new_tensor_1d(ctx.get(), GGML_TYPE_F32, h) : nullptr;
+    ggml_tensor * out = ggml_flash_attn_ext(ctx.get(), q, k, v, mask, 1.0f / std::sqrt(static_cast<float>(d)), 0.0f, 0.0f);
+    ggml_flash_attn_ext_add_sinks(out, sinks);
+    GGML_ASSERT(ggml_backend_dev_supports_op(dev, out));
+
+    ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 16, false);
+    ggml_build_forward_expand(graph, out);
+
+    ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
+    GGML_ASSERT(buffer != nullptr);
+
+    std::vector<float> q_data(static_cast<size_t>(d * n * h * s));
+    std::vector<float> k_data(static_cast<size_t>(d * kv * h_kv * s));
+    std::vector<float> v_data(static_cast<size_t>(d * kv * h_kv * s));
+    for (size_t i = 0; i < q_data.size(); ++i) {
+        q_data[i] = static_cast<float>(static_cast<int>((i * 7 + 3) % 41) - 20) / 29.0f;
+    }
+    for (size_t i = 0; i < k_data.size(); ++i) {
+        k_data[i] = static_cast<float>(static_cast<int>((i * 11 + 5) % 37) - 18) / 31.0f;
+    }
+    for (size_t i = 0; i < v_data.size(); ++i) {
+        v_data[i] = static_cast<float>(static_cast<int>((i * 13 + 9) % 43) - 21) / 23.0f;
+    }
+
+    std::vector<float> k_reference;
+    std::vector<float> v_reference;
+    std::vector<uint8_t> k_storage;
+    std::vector<uint8_t> v_storage;
+    prepare_rows(k_type, d, kv * h_kv * s, k_data, k_reference, k_storage);
+    prepare_rows(v_type, d, kv * h_kv * s, v_data, v_reference, v_storage);
+
+    ggml_backend_tensor_set(q, q_data.data(), 0, q_data.size() * sizeof(float));
+    ggml_backend_tensor_set(k, k_storage.data(), 0, k_storage.size());
+    ggml_backend_tensor_set(v, v_storage.data(), 0, v_storage.size());
+
+    std::vector<float> mask_reference;
+    std::vector<ggml_fp16_t> mask_storage;
+    if (mask_enabled) {
+        mask_reference.resize(static_cast<size_t>(kv * n * s));
+        mask_storage.resize(mask_reference.size());
+        for (int64_t seq = 0; seq < s; ++seq) {
+            for (int64_t token = 0; token < n; ++token) {
+                for (int64_t t = 0; t < kv; ++t) {
+                    const float value = t > token + 1 ? -1000.0f : 0.125f * static_cast<float>(token - t);
+                    mask_reference[index_4d(t, token, 0, seq, kv, n, 1)] = value;
+                    mask_storage[index_4d(t, token, 0, seq, kv, n, 1)] = ggml_fp32_to_fp16(value);
+                }
+            }
+        }
+        ggml_backend_tensor_set(mask, mask_storage.data(), 0, mask_storage.size() * sizeof(ggml_fp16_t));
+    }
+
+    std::vector<float> sink_data;
+    if (sinks_enabled) {
+        sink_data.resize(static_cast<size_t>(h));
+        for (int64_t head = 0; head < h; ++head) {
+            sink_data[static_cast<size_t>(head)] = -0.5f + 0.25f * static_cast<float>(head);
+        }
+        ggml_backend_tensor_set(sinks, sink_data.data(), 0, sink_data.size() * sizeof(float));
+    }
+
+    GGML_ASSERT(ggml_backend_graph_compute(backend, graph) == GGML_STATUS_SUCCESS);
+    expect_near(
+        tensor_to_float(out),
+        reference_flash_attn_ext_decode(
+            q_data, k_reference, v_reference, mask_reference, sink_data,
+            d, n, h, h_kv, kv, s,
+            1.0f / std::sqrt(static_cast<float>(d)),
+            mask_enabled,
+            sinks_enabled),
+        5.0e-3f,
+        label);
 }
 
 static void run_add_case(ggml_backend_t backend, int64_t n) {
@@ -1333,6 +1501,18 @@ int main() {
         run_mul_mat_vec_case(
             backend.get(), dev, GGML_TYPE_Q8_0, 2 * ggml_blck_size(GGML_TYPE_Q8_0), 2, 3,
             5.0e-4f, "mul_mat_vec_q8_0_two_blocks");
+        run_flash_attn_ext_decode_case(
+            backend.get(), dev, GGML_TYPE_F16, GGML_TYPE_F16, true, true, "flash_attn_ext_f16");
+        run_flash_attn_ext_decode_case(
+            backend.get(), dev, GGML_TYPE_BF16, GGML_TYPE_BF16, false, false, "flash_attn_ext_bf16");
+        run_flash_attn_ext_decode_case(
+            backend.get(), dev, GGML_TYPE_F32, GGML_TYPE_F32, false, false, "flash_attn_ext_f32");
+        run_flash_attn_ext_decode_case(
+            backend.get(), dev, GGML_TYPE_Q4_0, GGML_TYPE_Q4_0, false, false, "flash_attn_ext_q4_0");
+        run_flash_attn_ext_decode_case(
+            backend.get(), dev, GGML_TYPE_Q8_0, GGML_TYPE_Q8_0, false, false, "flash_attn_ext_q8_0");
+        run_flash_attn_ext_decode_case(
+            backend.get(), dev, GGML_TYPE_Q8_0, GGML_TYPE_Q4_0, false, false, "flash_attn_ext_q8_0_q4_0");
         run_soft_max_case(backend.get(), 1, false);
         run_soft_max_case(backend.get(), 257, false);
         run_soft_max_case(backend.get(), 257, true);

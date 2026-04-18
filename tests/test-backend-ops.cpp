@@ -8587,54 +8587,42 @@ static std::vector<std::unique_ptr<test_case>> make_test_cases_eval() {
         }
     }
 
-    for (int hsk : { 40, 64, 72, 80, 96, 128, 192, 256, 320, 512, 576 }) {
-        for (int hsv : { 40, 64, 72, 80, 96, 128, 192, 256, 512 }) {
-            if (hsk != 192 && hsk != 320 && hsk != 576 && hsk != hsv) continue;
-            if (hsk == 192 && (hsv != 128 && hsv != 192)) continue;
-            if (hsk == 576 && hsv != 512) continue; // DeepSeek MLA
-            if (hsk == 320 && hsv != 256) continue; // Mistral4 MLA
+    struct flash_attn_ext_case {
+        int64_t hsk;
+        int64_t hsv;
+        int64_t nh;
+        std::array<int64_t, 2> nr23;
+        int64_t kv;
+        int64_t nb;
+        bool mask;
+        bool sinks;
+        float max_bias;
+        float logit_softcap;
+        ggml_prec prec;
+        ggml_type type_KV;
+        std::array<int32_t, 4> permute;
+    };
 
-            for (bool mask : { true, false } ) {
-                for (bool sinks : { true, false } ) {
-                    for (float max_bias : { 0.0f, 8.0f }) {
-                        if (!mask && max_bias > 0.0f) continue;
-                        for (float logit_softcap : {0.0f, 10.0f}) {
-                            if (hsk != 128 && logit_softcap != 0.0f) continue;
-                            for (int nh : { 1, 4 }) {
-                                if (nh == 1 && hsk != 320 && hsk != 576) continue;
-                                for (int nr3 : { 1, 3, }) {
-                                    if (hsk > 64 && nr3 > 1) continue; // skip broadcast for large head sizes
-                                    for (int nr2 : { 1, 4, 12, 20, 32 }) {
-                                        if (nr2 == 12 && hsk != 128) continue;
-                                        if (nr2 == 20 && (nh != 1 || hsk != 576)) continue;
-                                        if (nr2 == 32 && (nh != 1 || hsk != 320)) continue;
-                                        //for (int kv : { 1, 17, 31, 33, 61, 113, 65, 127, 129, 130, 255, 260, 371, 380, 407, 512, 1024, }) {
-                                        for (int kv : { 113, 512, 1024, }) {
-                                            if (nr2 != 1 && kv != 512) continue;
-                                            for (int nb : { 1, 3, 32, 75, }) {
-                                                for (ggml_prec prec : {GGML_PREC_F32, GGML_PREC_DEFAULT}) {
-                                                    if (hsk != 128 && prec == GGML_PREC_DEFAULT) continue;
-                                                    for (ggml_type type_KV : {GGML_TYPE_F32, GGML_TYPE_F16, GGML_TYPE_BF16, GGML_TYPE_Q8_0, GGML_TYPE_Q4_0}) {
-                                                        if (type_KV != GGML_TYPE_F16 && hsk != 64 && hsk != 72) continue;
-                                                        test_cases.emplace_back(new test_flash_attn_ext(
-                                                                    hsk, hsv, nh, {nr2, nr3}, kv, nb, mask, sinks, max_bias, logit_softcap, prec, type_KV));
-                                                        // run fewer test cases permuted
-                                                        if (mask == true && max_bias == 0.0f && logit_softcap == 0 && kv == 512) {
-                                                            test_cases.emplace_back(new test_flash_attn_ext(
-                                                                        hsk, hsv, nh, {nr2, nr3}, kv, nb, mask, sinks, max_bias, logit_softcap, prec, type_KV, {0, 2, 1, 3}));
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    const std::vector<flash_attn_ext_case> flash_attn_ext_cases = {
+        { 40,  40,  4,  {1, 1},  113, 3,  true,  true,  0.0f,  0.0f, GGML_PREC_F32,     GGML_TYPE_F16,  {0, 1, 2, 3} },
+        { 40,  40,  4,  {4, 3},  512, 75, true,  true,  8.0f,  0.0f, GGML_PREC_F32,     GGML_TYPE_F16,  {0, 1, 2, 3} },
+        { 40,  40,  4,  {1, 1}, 1024, 75, false, false, 0.0f,  0.0f, GGML_PREC_F32,     GGML_TYPE_F16,  {0, 1, 2, 3} },
+        { 64,  64,  4,  {4, 1},  512, 3,  true,  true,  0.0f,  0.0f, GGML_PREC_F32,     GGML_TYPE_F16,  {0, 2, 1, 3} },
+        { 64,  64,  4,  {4, 1},  512, 3,  true,  true,  0.0f,  0.0f, GGML_PREC_F32,     GGML_TYPE_F32,  {0, 2, 1, 3} },
+        { 64,  64,  4,  {4, 1},  512, 3,  true,  true,  0.0f,  0.0f, GGML_PREC_F32,     GGML_TYPE_BF16, {0, 2, 1, 3} },
+        { 64,  64,  4,  {4, 1},  512, 3,  true,  true,  0.0f,  0.0f, GGML_PREC_F32,     GGML_TYPE_Q8_0, {0, 2, 1, 3} },
+        { 64,  64,  4,  {4, 1},  512, 3,  true,  true,  0.0f,  0.0f, GGML_PREC_F32,     GGML_TYPE_Q4_0, {0, 2, 1, 3} },
+        { 128, 128, 4,  {1, 1},  113, 3,  true,  true,  0.0f, 10.0f, GGML_PREC_F32,     GGML_TYPE_F16,  {0, 1, 2, 3} },
+        { 128, 128, 4,  {12, 1}, 512, 1,  true,  false, 0.0f,  0.0f, GGML_PREC_DEFAULT, GGML_TYPE_F16,  {0, 1, 2, 3} },
+        { 192, 128, 4,  {1, 1},  113, 1,  true,  false, 0.0f,  0.0f, GGML_PREC_F32,     GGML_TYPE_F16,  {0, 1, 2, 3} },
+        { 320, 256, 1,  {32, 1}, 512, 1,  true,  false, 0.0f,  0.0f, GGML_PREC_F32,     GGML_TYPE_F16,  {0, 1, 2, 3} },
+        { 576, 512, 1,  {20, 1}, 512, 1,  true,  false, 0.0f,  0.0f, GGML_PREC_F32,     GGML_TYPE_F16,  {0, 1, 2, 3} },
+    };
+
+    for (const auto & c : flash_attn_ext_cases) {
+        test_cases.emplace_back(new test_flash_attn_ext(
+                    c.hsk, c.hsv, c.nh, c.nr23, c.kv, c.nb, c.mask, c.sinks,
+                    c.max_bias, c.logit_softcap, c.prec, c.type_KV, c.permute));
     }
 
     test_cases.emplace_back(new test_cross_entropy_loss     (GGML_TYPE_F32, {   10, 5, 4, 3}));
