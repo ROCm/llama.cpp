@@ -306,6 +306,133 @@ struct ggml_backend_hrx_mul_mat_id_q4_k_constants {
 
 static_assert(sizeof(ggml_backend_hrx_mul_mat_id_q4_k_constants) == 104);
 
+struct ggml_backend_hrx_clear_u32_constants {
+    int64_t n;
+};
+
+static_assert(sizeof(ggml_backend_hrx_clear_u32_constants) == 8);
+
+struct ggml_backend_hrx_compact_moe_routes_constants {
+    int64_t n_ids;
+    int64_t n_tokens;
+    int64_t n_experts;
+    int64_t route_capacity;
+    int64_t ids_nb0;
+    int64_t ids_nb1;
+};
+
+static_assert(sizeof(ggml_backend_hrx_compact_moe_routes_constants) == 48);
+
+struct ggml_backend_hrx_mul_mat_id_q4_k_grouped_constants {
+    int64_t k;
+    int64_t rows;
+    int64_t n_ids;
+    int64_t n_tokens;
+    int64_t n_experts;
+    int64_t route_capacity;
+    int64_t src0_nb1;
+    int64_t src0_nb2;
+    int64_t src1_nb1;
+    int64_t src1_nb2;
+    int64_t dst_nb1;
+    int64_t dst_nb2;
+};
+
+static_assert(sizeof(ggml_backend_hrx_mul_mat_id_q4_k_grouped_constants) == 96);
+
+struct ggml_backend_hrx_mul_mat_id_q4_k_q8_1_constants {
+    int64_t k;
+    int64_t rows;
+    int64_t n_ids;
+    int64_t n_tokens;
+    int64_t n_experts;
+    int64_t src0_nb1;
+    int64_t src0_nb2;
+    int64_t ids_nb0;
+    int64_t ids_nb1;
+    int64_t dst_nb1;
+    int64_t dst_nb2;
+    int64_t src1_cols;
+};
+
+static_assert(sizeof(ggml_backend_hrx_mul_mat_id_q4_k_q8_1_constants) == 96);
+
+struct ggml_backend_hrx_mul_mat_id_q4_k_mul_constants {
+    int64_t k;
+    int64_t rows;
+    int64_t n_ids;
+    int64_t n_tokens;
+    int64_t n_experts;
+    int64_t src0_nb1;
+    int64_t src0_nb2;
+    int64_t src1_nb1;
+    int64_t src1_nb2;
+    int64_t ids_nb0;
+    int64_t ids_nb1;
+    int64_t dst_nb1;
+    int64_t dst_nb2;
+    int64_t scale_nb1;
+};
+
+static_assert(sizeof(ggml_backend_hrx_mul_mat_id_q4_k_mul_constants) == 112);
+
+struct ggml_backend_hrx_mul_mat_id_q4_k_swiglu_constants {
+    int64_t k;
+    int64_t rows;
+    int64_t n_ids;
+    int64_t n_tokens;
+    int64_t n_experts;
+    int64_t gate_nb1;
+    int64_t gate_nb2;
+    int64_t up_nb1;
+    int64_t up_nb2;
+    int64_t src1_nb1;
+    int64_t src1_nb2;
+    int64_t ids_nb0;
+    int64_t ids_nb1;
+    int64_t dst_nb1;
+    int64_t dst_nb2;
+};
+
+static_assert(sizeof(ggml_backend_hrx_mul_mat_id_q4_k_swiglu_constants) == 120);
+
+struct ggml_backend_hrx_mul_mat_id_q4_k_swiglu_grouped_constants {
+    int64_t k;
+    int64_t rows;
+    int64_t n_ids;
+    int64_t n_tokens;
+    int64_t n_experts;
+    int64_t route_capacity;
+    int64_t gate_nb1;
+    int64_t gate_nb2;
+    int64_t up_nb1;
+    int64_t up_nb2;
+    int64_t src1_nb1;
+    int64_t src1_nb2;
+    int64_t dst_nb1;
+    int64_t dst_nb2;
+};
+
+static_assert(sizeof(ggml_backend_hrx_mul_mat_id_q4_k_swiglu_grouped_constants) == 112);
+
+struct ggml_backend_hrx_mul_mat_id_q4_k_mul_q8_1_constants {
+    int64_t k;
+    int64_t rows;
+    int64_t n_ids;
+    int64_t n_tokens;
+    int64_t n_experts;
+    int64_t src0_nb1;
+    int64_t src0_nb2;
+    int64_t ids_nb0;
+    int64_t ids_nb1;
+    int64_t dst_nb1;
+    int64_t dst_nb2;
+    int64_t src1_cols;
+    int64_t scale_nb1;
+};
+
+static_assert(sizeof(ggml_backend_hrx_mul_mat_id_q4_k_mul_q8_1_constants) == 104);
+
 struct ggml_backend_hrx_flash_attn_ext_f32_decode_constants {
     int64_t D;
     int64_t KV;
@@ -552,7 +679,24 @@ struct ggml_backend_hrx_device_context {
     ggml_backend_hrx_op_provider mul_mat_vec_f32_provider;
     ggml_backend_hrx_op_provider mul_mat_vec_f32_batched_provider;
     ggml_backend_hrx_op_provider mul_mat_id_q4_k_provider;
+    ggml_backend_hrx_op_provider mul_mat_id_q4_k_row4_wg64_provider;
     ggml_backend_hrx_op_provider mul_mat_id_q4_k_wg64_provider;
+    ggml_backend_hrx_op_provider clear_u32_provider;
+    ggml_backend_hrx_op_provider compact_moe_routes_provider;
+    ggml_backend_hrx_op_provider mul_mat_id_q4_k_grouped_row2_route8_wg64_provider;
+    ggml_backend_hrx_op_provider mul_mat_id_q4_k_grouped_q8_1_x4_mmq64x64_wg64_provider;
+    ggml_backend_hrx_op_provider mul_mat_id_q4_k_q8_1_provider;
+    ggml_backend_hrx_op_provider mul_mat_id_q4_k_mul_provider;
+    ggml_backend_hrx_op_provider mul_mat_id_q4_k_mul_wg64_provider;
+    ggml_backend_hrx_op_provider mul_mat_id_q4_k_mul_packed_wg64_provider;
+    ggml_backend_hrx_op_provider mul_mat_id_q4_k_mul_rows2_x16_wg32_provider;
+    ggml_backend_hrx_op_provider mul_mat_id_q4_k_swiglu_provider;
+    ggml_backend_hrx_op_provider mul_mat_id_q4_k_swiglu_wg64_provider;
+    ggml_backend_hrx_op_provider mul_mat_id_q4_k_swiglu_row4_wg64_provider;
+    ggml_backend_hrx_op_provider mul_mat_id_q4_k_swiglu_grouped_row2_route8_wg64_provider;
+    ggml_backend_hrx_op_provider mul_mat_id_q4_k_swiglu_grouped_q8_1_x4_mmq32x64_wg64_provider;
+    ggml_backend_hrx_op_provider mul_mat_id_q4_k_swiglu_packed_wg64_provider;
+    ggml_backend_hrx_op_provider mul_mat_id_q4_k_mul_q8_1_provider;
     ggml_backend_hrx_op_provider quantize_q8_1_provider;
     ggml_backend_hrx_op_provider quantize_q8_1_x4_provider;
     ggml_backend_hrx_op_provider mul_mat_vec_q4_k_provider;
@@ -626,7 +770,24 @@ static void ggml_backend_hrx_reset_providers(ggml_backend_hrx_device_context * d
     device_context->mul_mat_vec_f32_provider.reset();
     device_context->mul_mat_vec_f32_batched_provider.reset();
     device_context->mul_mat_id_q4_k_provider.reset();
+    device_context->mul_mat_id_q4_k_row4_wg64_provider.reset();
     device_context->mul_mat_id_q4_k_wg64_provider.reset();
+    device_context->clear_u32_provider.reset();
+    device_context->compact_moe_routes_provider.reset();
+    device_context->mul_mat_id_q4_k_grouped_row2_route8_wg64_provider.reset();
+    device_context->mul_mat_id_q4_k_grouped_q8_1_x4_mmq64x64_wg64_provider.reset();
+    device_context->mul_mat_id_q4_k_q8_1_provider.reset();
+    device_context->mul_mat_id_q4_k_mul_provider.reset();
+    device_context->mul_mat_id_q4_k_mul_wg64_provider.reset();
+    device_context->mul_mat_id_q4_k_mul_packed_wg64_provider.reset();
+    device_context->mul_mat_id_q4_k_mul_rows2_x16_wg32_provider.reset();
+    device_context->mul_mat_id_q4_k_swiglu_provider.reset();
+    device_context->mul_mat_id_q4_k_swiglu_wg64_provider.reset();
+    device_context->mul_mat_id_q4_k_swiglu_row4_wg64_provider.reset();
+    device_context->mul_mat_id_q4_k_swiglu_grouped_row2_route8_wg64_provider.reset();
+    device_context->mul_mat_id_q4_k_swiglu_grouped_q8_1_x4_mmq32x64_wg64_provider.reset();
+    device_context->mul_mat_id_q4_k_swiglu_packed_wg64_provider.reset();
+    device_context->mul_mat_id_q4_k_mul_q8_1_provider.reset();
     device_context->quantize_q8_1_provider.reset();
     device_context->quantize_q8_1_x4_provider.reset();
     device_context->mul_mat_vec_q4_k_provider.reset();
@@ -1833,6 +1994,55 @@ static bool ggml_backend_hrx_load_mul_mat_id_providers(ggml_backend_hrx_device_c
         device_context, "hrx_mul_mat_id_q4_k_f32", &device_context->mul_mat_id_q4_k_provider);
     ok = ggml_backend_hrx_load_catalog_provider(
         device_context, "hrx_mul_mat_id_q4_k_wg64_f32", &device_context->mul_mat_id_q4_k_wg64_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_id_q4_k_row4_wg64_f32",
+        &device_context->mul_mat_id_q4_k_row4_wg64_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_clear_u32", &device_context->clear_u32_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_compact_moe_routes_i32", &device_context->compact_moe_routes_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_id_q4_k_grouped_row2_route8_wg64_f32",
+        &device_context->mul_mat_id_q4_k_grouped_row2_route8_wg64_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_id_q4_k_grouped_q8_1_x4_mmq64x64_wg64_f32",
+        &device_context->mul_mat_id_q4_k_grouped_q8_1_x4_mmq64x64_wg64_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_id_q4_k_q8_1_f32",
+        &device_context->mul_mat_id_q4_k_q8_1_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_id_q4_k_mul_f32",
+        &device_context->mul_mat_id_q4_k_mul_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_id_q4_k_mul_wg64_f32",
+        &device_context->mul_mat_id_q4_k_mul_wg64_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_id_q4_k_mul_packed_wg64_f32",
+        &device_context->mul_mat_id_q4_k_mul_packed_wg64_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_id_q4_k_mul_rows2_x16_wg32_f32",
+        &device_context->mul_mat_id_q4_k_mul_rows2_x16_wg32_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_id_q4_k_swiglu_f32",
+        &device_context->mul_mat_id_q4_k_swiglu_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_id_q4_k_swiglu_wg64_f32",
+        &device_context->mul_mat_id_q4_k_swiglu_wg64_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_id_q4_k_swiglu_row4_wg64_f32",
+        &device_context->mul_mat_id_q4_k_swiglu_row4_wg64_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_id_q4_k_swiglu_grouped_row2_route8_wg64_f32",
+        &device_context->mul_mat_id_q4_k_swiglu_grouped_row2_route8_wg64_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_id_q4_k_swiglu_grouped_q8_1_x4_mmq32x64_wg64_f32",
+        &device_context->mul_mat_id_q4_k_swiglu_grouped_q8_1_x4_mmq32x64_wg64_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_id_q4_k_swiglu_packed_wg64_f32",
+        &device_context->mul_mat_id_q4_k_swiglu_packed_wg64_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_id_q4_k_mul_q8_1_f32",
+        &device_context->mul_mat_id_q4_k_mul_q8_1_provider) || ok;
     return ok;
 }
 
@@ -2549,6 +2759,7 @@ static bool ggml_backend_hrx_supports_swiglu_f32(
     const ggml_tensor * src0 = op->src[0];
     const ggml_tensor * src1 = op->src[1];
     return !ggml_backend_hrx_approximate_kernels_disabled() &&
+           !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_SWIGLU") &&
            device_context->swiglu_provider.kind == ggml_backend_hrx_provider_kind::hsaco &&
            op->op == GGML_OP_GLU &&
            ggml_get_glu_op(op) == GGML_GLU_OP_SWIGLU &&
@@ -3030,14 +3241,100 @@ static bool ggml_backend_hrx_supports_mul_mat_vec(
            ggml_backend_hrx_supports_mul_mat_vec_batched(device_context, op);
 }
 
-static const ggml_backend_hrx_op_provider * ggml_backend_hrx_mul_mat_id_q4_k_provider(
+static const ggml_backend_hrx_op_provider * ggml_backend_hrx_select_mul_mat_id_q4_k_provider(
         const ggml_backend_hrx_device_context * device_context,
-        int64_t k) {
+        int64_t k,
+        int64_t rows,
+        int64_t n_ids,
+        int64_t n_tokens) {
+    if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_Q4_K_ID_Q8_1_X4_MMQ_PROMPT") &&
+        !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_Q8_1_MMVQ") &&
+        k == 512 && rows % 64 == 0 && n_ids == 8 && n_tokens == 512 &&
+        ggml_backend_hrx_provider_available(device_context->clear_u32_provider) &&
+        ggml_backend_hrx_provider_available(device_context->compact_moe_routes_provider) &&
+        ggml_backend_hrx_provider_available(device_context->quantize_q8_1_x4_provider) &&
+        ggml_backend_hrx_provider_available(device_context->mul_mat_id_q4_k_grouped_q8_1_x4_mmq64x64_wg64_provider)) {
+        return &device_context->mul_mat_id_q4_k_grouped_q8_1_x4_mmq64x64_wg64_provider;
+    }
+    if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_Q4_K_ID_GROUPED_PROMPT") &&
+        k == 512 && rows % 2 == 0 && n_ids == 8 && n_tokens == 512 &&
+        ggml_backend_hrx_provider_available(device_context->clear_u32_provider) &&
+        ggml_backend_hrx_provider_available(device_context->compact_moe_routes_provider) &&
+        ggml_backend_hrx_provider_available(device_context->mul_mat_id_q4_k_grouped_row2_route8_wg64_provider)) {
+        return &device_context->mul_mat_id_q4_k_grouped_row2_route8_wg64_provider;
+    }
+    if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_Q4_K_ID_ROW4_PROMPT") &&
+        k == 512 && rows % 4 == 0 && n_ids > 0 && n_tokens == 512 &&
+        ggml_backend_hrx_provider_available(device_context->mul_mat_id_q4_k_row4_wg64_provider)) {
+        return &device_context->mul_mat_id_q4_k_row4_wg64_provider;
+    }
     if (k <= 2048 &&
-        device_context->mul_mat_id_q4_k_wg64_provider.kind == ggml_backend_hrx_provider_kind::hsaco) {
+        ggml_backend_hrx_provider_available(device_context->mul_mat_id_q4_k_wg64_provider)) {
         return &device_context->mul_mat_id_q4_k_wg64_provider;
     }
     return &device_context->mul_mat_id_q4_k_provider;
+}
+
+static const ggml_backend_hrx_op_provider * ggml_backend_hrx_select_mul_mat_id_q4_k_mul_provider(
+        const ggml_backend_hrx_device_context * device_context,
+        int64_t k,
+        int64_t rows,
+        int64_t n_ids,
+        int64_t n_tokens) {
+    if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_PACKED_Q4_K_MUL") &&
+        !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_PACKED_Q4_K_MUL_ROWS2_X16") &&
+        k == 512 && rows == 2048 && n_ids == 8 && n_tokens == 1 &&
+        ggml_backend_hrx_provider_available(device_context->mul_mat_id_q4_k_mul_rows2_x16_wg32_provider)) {
+        return &device_context->mul_mat_id_q4_k_mul_rows2_x16_wg32_provider;
+    }
+    if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_PACKED_Q4_K_MUL") &&
+        k == 512 && rows == 2048 && n_ids == 8 && n_tokens == 1 &&
+        ggml_backend_hrx_provider_available(device_context->mul_mat_id_q4_k_mul_packed_wg64_provider)) {
+        return &device_context->mul_mat_id_q4_k_mul_packed_wg64_provider;
+    }
+    if (k <= 2048 && ggml_backend_hrx_provider_available(device_context->mul_mat_id_q4_k_mul_wg64_provider)) {
+        return &device_context->mul_mat_id_q4_k_mul_wg64_provider;
+    }
+    return &device_context->mul_mat_id_q4_k_mul_provider;
+}
+
+static const ggml_backend_hrx_op_provider * ggml_backend_hrx_select_mul_mat_id_q4_k_swiglu_provider(
+        const ggml_backend_hrx_device_context * device_context,
+        int64_t k,
+        int64_t rows,
+        int64_t n_ids,
+        int64_t n_tokens) {
+    if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_Q4_K_SWIGLU_Q8_1_X4_MMQ_PROMPT") &&
+        !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_Q8_1_MMVQ") &&
+        k == 2048 && rows % 16 == 0 && n_ids == 8 && n_tokens == 512 &&
+        ggml_backend_hrx_provider_available(device_context->clear_u32_provider) &&
+        ggml_backend_hrx_provider_available(device_context->compact_moe_routes_provider) &&
+        ggml_backend_hrx_provider_available(device_context->quantize_q8_1_x4_provider) &&
+        ggml_backend_hrx_provider_available(
+            device_context->mul_mat_id_q4_k_swiglu_grouped_q8_1_x4_mmq32x64_wg64_provider)) {
+        return &device_context->mul_mat_id_q4_k_swiglu_grouped_q8_1_x4_mmq32x64_wg64_provider;
+    }
+    if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_PACKED_Q4_K_SWIGLU") &&
+        k == 2048 && rows == 512 && n_ids == 8 && n_tokens == 1 &&
+        ggml_backend_hrx_provider_available(device_context->mul_mat_id_q4_k_swiglu_packed_wg64_provider)) {
+        return &device_context->mul_mat_id_q4_k_swiglu_packed_wg64_provider;
+    }
+    if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_Q4_K_SWIGLU_GROUPED_PROMPT") &&
+        k == 2048 && rows % 2 == 0 && n_ids == 8 && n_tokens == 512 &&
+        ggml_backend_hrx_provider_available(device_context->clear_u32_provider) &&
+        ggml_backend_hrx_provider_available(device_context->compact_moe_routes_provider) &&
+        ggml_backend_hrx_provider_available(device_context->mul_mat_id_q4_k_swiglu_grouped_row2_route8_wg64_provider)) {
+        return &device_context->mul_mat_id_q4_k_swiglu_grouped_row2_route8_wg64_provider;
+    }
+    if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_Q4_K_SWIGLU_ROW4_PROMPT") &&
+        k == 2048 && rows % 4 == 0 && n_ids == 8 && n_tokens == 512 &&
+        ggml_backend_hrx_provider_available(device_context->mul_mat_id_q4_k_swiglu_row4_wg64_provider)) {
+        return &device_context->mul_mat_id_q4_k_swiglu_row4_wg64_provider;
+    }
+    if (k <= 2048 && ggml_backend_hrx_provider_available(device_context->mul_mat_id_q4_k_swiglu_wg64_provider)) {
+        return &device_context->mul_mat_id_q4_k_swiglu_wg64_provider;
+    }
+    return &device_context->mul_mat_id_q4_k_swiglu_provider;
 }
 
 static bool ggml_backend_hrx_supports_mul_mat_id_q4_k(
@@ -3055,7 +3352,7 @@ static bool ggml_backend_hrx_supports_mul_mat_id_q4_k(
     }
 
     const ggml_backend_hrx_op_provider * provider =
-        ggml_backend_hrx_mul_mat_id_q4_k_provider(device_context, src0->ne[0]);
+        ggml_backend_hrx_select_mul_mat_id_q4_k_provider(device_context, src0->ne[0], src0->ne[1], src2->ne[0], src2->ne[1]);
     return provider &&
            provider->kind == ggml_backend_hrx_provider_kind::hsaco &&
            src0->type == GGML_TYPE_Q4_K &&
@@ -3087,6 +3384,89 @@ static bool ggml_backend_hrx_supports_mul_mat_id_q4_k(
            src1->nb[0] == ggml_type_size(src1->type) &&
            src2->nb[0] == ggml_type_size(src2->type) &&
            op->nb[0] == ggml_type_size(op->type);
+}
+
+static bool ggml_backend_hrx_supports_mul_mat_id_q4_k_q8_1(
+        const ggml_backend_hrx_device_context * device_context,
+        const ggml_tensor * op) {
+    return !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_Q8_1_MMVQ") &&
+           ggml_backend_hrx_q8_1_mmvq_forced() &&
+           ggml_backend_hrx_provider_available(device_context->quantize_q8_1_provider) &&
+           ggml_backend_hrx_provider_available(device_context->mul_mat_id_q4_k_q8_1_provider) &&
+           ggml_backend_hrx_supports_mul_mat_id_q4_k(device_context, op);
+}
+
+static bool ggml_backend_hrx_supports_mul_mat_id_q4_k_mul(
+        const ggml_backend_hrx_device_context * device_context,
+        const ggml_tensor * mmid,
+        const ggml_tensor * mul) {
+    if (!mmid || !mul ||
+        !ggml_backend_hrx_supports_mul_mat_id_q4_k(device_context, mmid) ||
+        mul->op != GGML_OP_MUL ||
+        mul->type != GGML_TYPE_F32 ||
+        mul->src[0] != mmid ||
+        !mul->src[1] ||
+        mul->src[1]->type != GGML_TYPE_F32 ||
+        !ggml_are_same_shape(mul, mmid) ||
+        mul->nb[0] != ggml_type_size(mul->type)) {
+        return false;
+    }
+
+    const ggml_tensor * scale = mul->src[1];
+    const ggml_backend_hrx_op_provider * provider = ggml_backend_hrx_select_mul_mat_id_q4_k_mul_provider(
+        device_context, mmid->src[0]->ne[0], mmid->src[0]->ne[1], mmid->src[2]->ne[0], mmid->src[2]->ne[1]);
+    return provider &&
+           ggml_backend_hrx_provider_available(*provider) &&
+           scale->ne[0] == 1 &&
+           scale->ne[1] == mmid->ne[1] &&
+           scale->ne[2] == 1 &&
+           scale->ne[3] == 1 &&
+           scale->nb[0] == ggml_type_size(scale->type) &&
+           ggml_is_contiguous(scale);
+}
+
+static bool ggml_backend_hrx_supports_mul_mat_id_q4_k_mul_q8_1(
+        const ggml_backend_hrx_device_context * device_context,
+        const ggml_tensor * mmid,
+        const ggml_tensor * mul) {
+    return !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_Q8_1_MMVQ") &&
+           ggml_backend_hrx_q8_1_mmvq_forced() &&
+           ggml_backend_hrx_provider_available(device_context->quantize_q8_1_provider) &&
+           ggml_backend_hrx_provider_available(device_context->mul_mat_id_q4_k_mul_q8_1_provider) &&
+           ggml_backend_hrx_supports_mul_mat_id_q4_k_mul(device_context, mmid, mul);
+}
+
+static bool ggml_backend_hrx_supports_mul_mat_id_q4_k_swiglu(
+        const ggml_backend_hrx_device_context * device_context,
+        const ggml_tensor * gate,
+        const ggml_tensor * up,
+        const ggml_tensor * swiglu) {
+    if (!gate || !up || !swiglu ||
+        gate->op != GGML_OP_MUL_MAT_ID ||
+        up->op != GGML_OP_MUL_MAT_ID ||
+        swiglu->op != GGML_OP_GLU ||
+        ggml_get_glu_op(swiglu) != GGML_GLU_OP_SWIGLU ||
+        ggml_get_op_params_i32(swiglu, 1) != 0 ||
+        swiglu->src[0] != gate ||
+        swiglu->src[1] != up ||
+        !ggml_backend_hrx_supports_mul_mat_id_q4_k(device_context, gate) ||
+        !ggml_backend_hrx_supports_mul_mat_id_q4_k(device_context, up)) {
+        return false;
+    }
+
+    const ggml_backend_hrx_op_provider * provider = ggml_backend_hrx_select_mul_mat_id_q4_k_swiglu_provider(
+        device_context, up->src[0]->ne[0], up->src[0]->ne[1], up->src[2]->ne[0], up->src[2]->ne[1]);
+    return provider &&
+           ggml_backend_hrx_provider_available(*provider) &&
+           gate->src[1] == up->src[1] &&
+           gate->src[2] == up->src[2] &&
+           gate->src[0]->type == up->src[0]->type &&
+           ggml_are_same_shape(gate->src[0], up->src[0]) &&
+           ggml_are_same_stride(gate->src[0], up->src[0]) &&
+           ggml_are_same_shape(gate, up) &&
+           ggml_are_same_shape(swiglu, up) &&
+           swiglu->type == GGML_TYPE_F32 &&
+           swiglu->nb[0] == ggml_type_size(swiglu->type);
 }
 
 static const ggml_backend_hrx_op_provider * ggml_backend_hrx_flash_attn_ext_f32_decode_provider(
@@ -4754,18 +5134,132 @@ static ggml_status ggml_backend_hrx_dispatch_mul_mat_id_q4_k(
         /* .dst_nb2    = */ static_cast<int64_t>(dst->nb[2]),
     };
 
-    const ggml_backend_hrx_op_provider * provider =
-        ggml_backend_hrx_mul_mat_id_q4_k_provider(context->device_context, constants.k);
+    const ggml_backend_hrx_op_provider * provider = ggml_backend_hrx_select_mul_mat_id_q4_k_provider(
+        context->device_context, constants.k, constants.rows, constants.n_ids, constants.n_tokens);
     if (!provider || provider->kind != ggml_backend_hrx_provider_kind::hsaco) {
         GGML_LOG_ERROR("%s: MUL_MAT_ID provider is unavailable\n", __func__);
         return GGML_STATUS_FAILED;
+    }
+
+    const bool use_grouped =
+        provider == &context->device_context->mul_mat_id_q4_k_grouped_row2_route8_wg64_provider ||
+        provider == &context->device_context->mul_mat_id_q4_k_grouped_q8_1_x4_mmq64x64_wg64_provider;
+    const bool use_q8_1_x4_mmq =
+        provider == &context->device_context->mul_mat_id_q4_k_grouped_q8_1_x4_mmq64x64_wg64_provider;
+    if (use_grouped) {
+        const size_t route_capacity = static_cast<size_t>(constants.n_ids * constants.n_tokens);
+        const size_t counts_size = static_cast<size_t>(constants.n_experts) * sizeof(uint32_t);
+        const size_t routes_size = static_cast<size_t>(constants.n_experts) * route_capacity * sizeof(uint32_t);
+        hrx_buffer_ref_t scratch_ref = {};
+        if (!ggml_backend_hrx_request_scratch_buffer(context, counts_size + routes_size, &scratch_ref)) {
+            return GGML_STATUS_FAILED;
+        }
+        hrx_buffer_ref_t counts_ref = { scratch_ref.buffer, scratch_ref.offset, counts_size };
+        hrx_buffer_ref_t routes_ref = { scratch_ref.buffer, scratch_ref.offset + counts_size, routes_size };
+
+        const auto & clear_provider = context->device_context->clear_u32_provider;
+        ggml_backend_hrx_clear_u32_constants clear_constants = { constants.n_experts };
+        hrx_dispatch_config_t clear_config = {
+            { static_cast<uint32_t>((clear_constants.n + 255) / 256), 1, 1 },
+            { clear_provider.export_info.workgroup_size[0] ? clear_provider.export_info.workgroup_size[0] : 256, 1, 1 },
+            0,
+        };
+        if (!GGML_HRX_CHECK(hrx_stream_dispatch(
+                context->stream, clear_provider.executable, clear_provider.export_ordinal, &clear_config,
+                &clear_constants, sizeof(clear_constants), &counts_ref, 1, HRX_DISPATCH_FLAG_NONE))) {
+            return GGML_STATUS_FAILED;
+        }
+
+        hrx_buffer_ref_t compact_bindings[3] = { bindings[2], counts_ref, routes_ref };
+        ggml_backend_hrx_compact_moe_routes_constants compact_constants = {
+            constants.n_ids,
+            constants.n_tokens,
+            constants.n_experts,
+            static_cast<int64_t>(route_capacity),
+            constants.ids_nb0,
+            constants.ids_nb1,
+        };
+        const auto & compact_provider = context->device_context->compact_moe_routes_provider;
+        hrx_dispatch_config_t compact_config = {
+            { static_cast<uint32_t>((compact_constants.n_ids * compact_constants.n_tokens + 255) / 256), 1, 1 },
+            { compact_provider.export_info.workgroup_size[0] ? compact_provider.export_info.workgroup_size[0] : 256, 1, 1 },
+            0,
+        };
+        if (!GGML_HRX_CHECK(hrx_stream_dispatch(
+                context->stream, compact_provider.executable, compact_provider.export_ordinal, &compact_config,
+                &compact_constants, sizeof(compact_constants), compact_bindings, 3, HRX_DISPATCH_FLAG_NONE))) {
+            return GGML_STATUS_FAILED;
+        }
+
+        hrx_buffer_ref_t src1_compute_ref = bindings[1];
+        if (use_q8_1_x4_mmq) {
+            const int64_t q8_1_blocks = constants.n_tokens * constants.n_ids * (constants.k / 32);
+            const size_t q8_1_size = static_cast<size_t>(((q8_1_blocks + 3) / 4) * 144);
+            if (!ggml_backend_hrx_request_scratch_buffer(context, q8_1_size, &src1_compute_ref)) {
+                return GGML_STATUS_FAILED;
+            }
+            hrx_buffer_ref_t quant_bindings[2] = { bindings[1], src1_compute_ref };
+            ggml_backend_hrx_quantize_q8_1_constants quant_constants = {
+                src1->ne[0],
+                src1->ne[1] == 1 ? 0 : static_cast<int64_t>(src1->nb[1] / sizeof(float)),
+                static_cast<int64_t>(src1->nb[2] / sizeof(float)),
+                static_cast<int64_t>(src1->nb[3] / sizeof(float)),
+                constants.k,
+                constants.n_ids,
+                constants.n_tokens,
+            };
+            const auto & quant_provider = context->device_context->quantize_q8_1_x4_provider;
+            hrx_dispatch_config_t quant_config = {
+                { static_cast<uint32_t>((quant_constants.ne0 + 127) / 128),
+                  static_cast<uint32_t>(quant_constants.ne1),
+                  static_cast<uint32_t>(quant_constants.ne2) },
+                { quant_provider.export_info.workgroup_size[0] ? quant_provider.export_info.workgroup_size[0] : 128, 1, 1 },
+                0,
+            };
+            if (!GGML_HRX_CHECK(hrx_stream_dispatch(
+                    context->stream, quant_provider.executable, quant_provider.export_ordinal, &quant_config,
+                    &quant_constants, sizeof(quant_constants), quant_bindings, 2, HRX_DISPATCH_FLAG_NONE))) {
+                return GGML_STATUS_FAILED;
+            }
+        }
+
+        hrx_buffer_ref_t grouped_bindings[5] = { bindings[0], src1_compute_ref, counts_ref, routes_ref, bindings[3] };
+        ggml_backend_hrx_mul_mat_id_q4_k_grouped_constants grouped_constants = {
+            constants.k,
+            constants.rows,
+            constants.n_ids,
+            constants.n_tokens,
+            constants.n_experts,
+            static_cast<int64_t>(route_capacity),
+            constants.src0_nb1,
+            constants.src0_nb2,
+            constants.src1_nb1,
+            constants.src1_nb2,
+            constants.dst_nb1,
+            constants.dst_nb2,
+        };
+        hrx_dispatch_config_t grouped_config = {
+            { static_cast<uint32_t>(use_q8_1_x4_mmq ? (grouped_constants.rows + 63) / 64 : (grouped_constants.rows + 1) / 2),
+              static_cast<uint32_t>(use_q8_1_x4_mmq ? (grouped_constants.n_tokens + 31) / 32 : grouped_constants.n_experts),
+              static_cast<uint32_t>(use_q8_1_x4_mmq ? grouped_constants.n_experts : 1) },
+            { provider->export_info.workgroup_size[0] ? provider->export_info.workgroup_size[0] : 64, 1, 1 },
+            0,
+        };
+        if (!GGML_HRX_CHECK(hrx_stream_dispatch(
+                context->stream, provider->executable, provider->export_ordinal, &grouped_config,
+                &grouped_constants, sizeof(grouped_constants), grouped_bindings, 5, HRX_DISPATCH_FLAG_NONE))) {
+            return GGML_STATUS_FAILED;
+        }
+        return GGML_STATUS_SUCCESS;
     }
 
     const uint32_t workgroup_size = provider->export_info.workgroup_size[0] ?
         provider->export_info.workgroup_size[0] : 256;
     hrx_dispatch_config_t config = {
         /* .workgroup_count = */ {
-            static_cast<uint32_t>(constants.rows),
+            static_cast<uint32_t>(
+                provider == &context->device_context->mul_mat_id_q4_k_row4_wg64_provider ?
+                    (constants.rows + 3) / 4 : constants.rows),
             static_cast<uint32_t>(constants.n_ids * constants.n_tokens),
             1,
         },
@@ -4780,6 +5274,290 @@ static ggml_status ggml_backend_hrx_dispatch_mul_mat_id_q4_k(
     }
 
     return GGML_STATUS_SUCCESS;
+}
+
+static bool ggml_backend_hrx_dispatch_quantize_q8_1(
+        ggml_backend_hrx_context * context,
+        const ggml_tensor * src,
+        hrx_buffer_ref_t * q8_1_ref) {
+    hrx_buffer_ref_t src_ref = {};
+    if (!ggml_backend_hrx_tensor_buffer_ref(src, &src_ref)) {
+        return false;
+    }
+    const int64_t q8_1_blocks = src->ne[1] * src->ne[2] * (src->ne[0] / 32);
+    const size_t q8_1_size = static_cast<size_t>(q8_1_blocks * 36);
+    if (!ggml_backend_hrx_request_scratch_buffer(context, q8_1_size, q8_1_ref)) {
+        return false;
+    }
+    ggml_backend_hrx_quantize_q8_1_constants constants = {
+        src->ne[0],
+        static_cast<int64_t>(src->nb[1] / sizeof(float)),
+        static_cast<int64_t>(src->nb[2] / sizeof(float)),
+        static_cast<int64_t>(src->nb[3] / sizeof(float)),
+        src->ne[0],
+        src->ne[1],
+        src->ne[2],
+    };
+    const auto & provider = context->device_context->quantize_q8_1_provider;
+    hrx_buffer_ref_t bindings[2] = { src_ref, *q8_1_ref };
+    hrx_dispatch_config_t config = {
+        { static_cast<uint32_t>(constants.ne0 / 32),
+          static_cast<uint32_t>(constants.ne1),
+          static_cast<uint32_t>(constants.ne2) },
+        { provider.export_info.workgroup_size[0] ? provider.export_info.workgroup_size[0] : 32, 1, 1 },
+        0,
+    };
+    return GGML_HRX_CHECK(hrx_stream_dispatch(
+        context->stream, provider.executable, provider.export_ordinal, &config,
+        &constants, sizeof(constants), bindings, 2, HRX_DISPATCH_FLAG_NONE));
+}
+
+static ggml_status ggml_backend_hrx_dispatch_mul_mat_id_q4_k_q8_1(
+        ggml_backend_hrx_context * context,
+        const ggml_tensor * dst) {
+    const ggml_tensor * src0 = dst->src[0];
+    const ggml_tensor * src1 = dst->src[1];
+    const ggml_tensor * src2 = dst->src[2];
+    hrx_buffer_ref_t q8_1_ref = {};
+    if (!ggml_backend_hrx_dispatch_quantize_q8_1(context, src1, &q8_1_ref)) {
+        return GGML_STATUS_FAILED;
+    }
+    hrx_buffer_ref_t bindings[4] = {};
+    if (!ggml_backend_hrx_tensor_buffer_ref(src0, &bindings[0]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(src2, &bindings[2]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(dst, &bindings[3])) {
+        GGML_LOG_ERROR("%s: Q8_1 MUL_MAT_ID tensor is not backed by a HRX buffer\n", __func__);
+        return GGML_STATUS_FAILED;
+    }
+    bindings[1] = q8_1_ref;
+    ggml_backend_hrx_mul_mat_id_q4_k_q8_1_constants constants = {
+        src0->ne[0], src0->ne[1], src2->ne[0], src2->ne[1], src0->ne[2],
+        static_cast<int64_t>(src0->nb[1]), static_cast<int64_t>(src0->nb[2]),
+        static_cast<int64_t>(src2->nb[0]), static_cast<int64_t>(src2->nb[1]),
+        static_cast<int64_t>(dst->nb[1]), static_cast<int64_t>(dst->nb[2]), src1->ne[1],
+    };
+    const auto & provider = context->device_context->mul_mat_id_q4_k_q8_1_provider;
+    hrx_dispatch_config_t config = {
+        { static_cast<uint32_t>(constants.rows), static_cast<uint32_t>(constants.n_ids * constants.n_tokens), 1 },
+        { provider.export_info.workgroup_size[0] ? provider.export_info.workgroup_size[0] : 256, 1, 1 },
+        0,
+    };
+    return GGML_HRX_CHECK(hrx_stream_dispatch(
+        context->stream, provider.executable, provider.export_ordinal, &config,
+        &constants, sizeof(constants), bindings, 4, HRX_DISPATCH_FLAG_NONE)) ?
+        GGML_STATUS_SUCCESS : GGML_STATUS_FAILED;
+}
+
+static ggml_status ggml_backend_hrx_dispatch_mul_mat_id_q4_k_mul(
+        ggml_backend_hrx_context * context,
+        const ggml_tensor * mmid,
+        const ggml_tensor * mul) {
+    const ggml_tensor * src0 = mmid->src[0];
+    const ggml_tensor * src1 = mmid->src[1];
+    const ggml_tensor * src2 = mmid->src[2];
+    const ggml_tensor * scale = mul->src[1];
+    hrx_buffer_ref_t bindings[5] = {};
+    if (!ggml_backend_hrx_tensor_buffer_ref(src0, &bindings[0]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(src1, &bindings[1]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(src2, &bindings[2]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(scale, &bindings[3]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(mul, &bindings[4])) {
+        GGML_LOG_ERROR("%s: MUL_MAT_ID_MUL tensor is not backed by a HRX buffer\n", __func__);
+        return GGML_STATUS_FAILED;
+    }
+    ggml_backend_hrx_mul_mat_id_q4_k_mul_constants constants = {
+        src0->ne[0], src0->ne[1], src2->ne[0], src2->ne[1], src0->ne[2],
+        static_cast<int64_t>(src0->nb[1]), static_cast<int64_t>(src0->nb[2]),
+        src1->ne[1] == 1 ? 0 : static_cast<int64_t>(src1->nb[1]), static_cast<int64_t>(src1->nb[2]),
+        static_cast<int64_t>(src2->nb[0]), static_cast<int64_t>(src2->nb[1]),
+        static_cast<int64_t>(mul->nb[1]), static_cast<int64_t>(mul->nb[2]), static_cast<int64_t>(scale->nb[1]),
+    };
+    const ggml_backend_hrx_op_provider * provider = ggml_backend_hrx_select_mul_mat_id_q4_k_mul_provider(
+        context->device_context, constants.k, constants.rows, constants.n_ids, constants.n_tokens);
+    const bool rows2 =
+        provider == &context->device_context->mul_mat_id_q4_k_mul_rows2_x16_wg32_provider;
+    hrx_dispatch_config_t config = {
+        { static_cast<uint32_t>(rows2 ? (constants.rows + 1) / 2 : constants.rows),
+          static_cast<uint32_t>(constants.n_ids * constants.n_tokens), 1 },
+        { provider->export_info.workgroup_size[0] ? provider->export_info.workgroup_size[0] : 256, 1, 1 },
+        0,
+    };
+    return GGML_HRX_CHECK(hrx_stream_dispatch(
+        context->stream, provider->executable, provider->export_ordinal, &config,
+        &constants, sizeof(constants), bindings, 5, HRX_DISPATCH_FLAG_NONE)) ?
+        GGML_STATUS_SUCCESS : GGML_STATUS_FAILED;
+}
+
+static ggml_status ggml_backend_hrx_dispatch_mul_mat_id_q4_k_mul_q8_1(
+        ggml_backend_hrx_context * context,
+        const ggml_tensor * mmid,
+        const ggml_tensor * mul) {
+    const ggml_tensor * src0 = mmid->src[0];
+    const ggml_tensor * src1 = mmid->src[1];
+    const ggml_tensor * src2 = mmid->src[2];
+    const ggml_tensor * scale = mul->src[1];
+    hrx_buffer_ref_t q8_1_ref = {};
+    if (!ggml_backend_hrx_dispatch_quantize_q8_1(context, src1, &q8_1_ref)) {
+        return GGML_STATUS_FAILED;
+    }
+    hrx_buffer_ref_t bindings[5] = {};
+    if (!ggml_backend_hrx_tensor_buffer_ref(src0, &bindings[0]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(src2, &bindings[2]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(scale, &bindings[3]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(mul, &bindings[4])) {
+        GGML_LOG_ERROR("%s: Q8_1 MUL_MAT_ID_MUL tensor is not backed by a HRX buffer\n", __func__);
+        return GGML_STATUS_FAILED;
+    }
+    bindings[1] = q8_1_ref;
+    ggml_backend_hrx_mul_mat_id_q4_k_mul_q8_1_constants constants = {
+        src0->ne[0], src0->ne[1], src2->ne[0], src2->ne[1], src0->ne[2],
+        static_cast<int64_t>(src0->nb[1]), static_cast<int64_t>(src0->nb[2]),
+        static_cast<int64_t>(src2->nb[0]), static_cast<int64_t>(src2->nb[1]),
+        static_cast<int64_t>(mul->nb[1]), static_cast<int64_t>(mul->nb[2]), src1->ne[1],
+        static_cast<int64_t>(scale->nb[1]),
+    };
+    const auto & provider = context->device_context->mul_mat_id_q4_k_mul_q8_1_provider;
+    hrx_dispatch_config_t config = {
+        { static_cast<uint32_t>(constants.rows), static_cast<uint32_t>(constants.n_ids * constants.n_tokens), 1 },
+        { provider.export_info.workgroup_size[0] ? provider.export_info.workgroup_size[0] : 256, 1, 1 },
+        0,
+    };
+    return GGML_HRX_CHECK(hrx_stream_dispatch(
+        context->stream, provider.executable, provider.export_ordinal, &config,
+        &constants, sizeof(constants), bindings, 5, HRX_DISPATCH_FLAG_NONE)) ?
+        GGML_STATUS_SUCCESS : GGML_STATUS_FAILED;
+}
+
+static ggml_status ggml_backend_hrx_dispatch_mul_mat_id_q4_k_swiglu(
+        ggml_backend_hrx_context * context,
+        const ggml_tensor * gate,
+        const ggml_tensor * up,
+        const ggml_tensor * swiglu) {
+    const ggml_tensor * src1 = up->src[1];
+    const ggml_tensor * ids = up->src[2];
+    hrx_buffer_ref_t bindings[5] = {};
+    if (!ggml_backend_hrx_tensor_buffer_ref(gate->src[0], &bindings[0]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(up->src[0], &bindings[1]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(src1, &bindings[2]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(ids, &bindings[3]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(swiglu, &bindings[4])) {
+        GGML_LOG_ERROR("%s: MUL_MAT_ID_SWIGLU tensor is not backed by a HRX buffer\n", __func__);
+        return GGML_STATUS_FAILED;
+    }
+    ggml_backend_hrx_mul_mat_id_q4_k_swiglu_constants constants = {
+        up->src[0]->ne[0], up->src[0]->ne[1], ids->ne[0], ids->ne[1], up->src[0]->ne[2],
+        static_cast<int64_t>(gate->src[0]->nb[1]), static_cast<int64_t>(gate->src[0]->nb[2]),
+        static_cast<int64_t>(up->src[0]->nb[1]), static_cast<int64_t>(up->src[0]->nb[2]),
+        src1->ne[1] == 1 ? 0 : static_cast<int64_t>(src1->nb[1]), static_cast<int64_t>(src1->nb[2]),
+        static_cast<int64_t>(ids->nb[0]), static_cast<int64_t>(ids->nb[1]),
+        static_cast<int64_t>(swiglu->nb[1]), static_cast<int64_t>(swiglu->nb[2]),
+    };
+    const ggml_backend_hrx_op_provider * provider = ggml_backend_hrx_select_mul_mat_id_q4_k_swiglu_provider(
+        context->device_context, constants.k, constants.rows, constants.n_ids, constants.n_tokens);
+    const bool use_grouped =
+        provider == &context->device_context->mul_mat_id_q4_k_swiglu_grouped_row2_route8_wg64_provider ||
+        provider == &context->device_context->mul_mat_id_q4_k_swiglu_grouped_q8_1_x4_mmq32x64_wg64_provider;
+    const bool use_q8_1_x4_mmq =
+        provider == &context->device_context->mul_mat_id_q4_k_swiglu_grouped_q8_1_x4_mmq32x64_wg64_provider;
+    if (use_grouped) {
+        const size_t route_capacity = static_cast<size_t>(constants.n_ids * constants.n_tokens);
+        const size_t counts_size = static_cast<size_t>(constants.n_experts) * sizeof(uint32_t);
+        const size_t routes_size = static_cast<size_t>(constants.n_experts) * route_capacity * sizeof(uint32_t);
+        hrx_buffer_ref_t scratch_ref = {};
+        if (!ggml_backend_hrx_request_scratch_buffer(context, counts_size + routes_size, &scratch_ref)) {
+            return GGML_STATUS_FAILED;
+        }
+        hrx_buffer_ref_t counts_ref = { scratch_ref.buffer, scratch_ref.offset, counts_size };
+        hrx_buffer_ref_t routes_ref = { scratch_ref.buffer, scratch_ref.offset + counts_size, routes_size };
+        const auto & clear_provider = context->device_context->clear_u32_provider;
+        ggml_backend_hrx_clear_u32_constants clear_constants = { constants.n_experts };
+        hrx_dispatch_config_t clear_config = {
+            { static_cast<uint32_t>((clear_constants.n + 255) / 256), 1, 1 },
+            { clear_provider.export_info.workgroup_size[0] ? clear_provider.export_info.workgroup_size[0] : 256, 1, 1 },
+            0,
+        };
+        if (!GGML_HRX_CHECK(hrx_stream_dispatch(
+                context->stream, clear_provider.executable, clear_provider.export_ordinal, &clear_config,
+                &clear_constants, sizeof(clear_constants), &counts_ref, 1, HRX_DISPATCH_FLAG_NONE))) {
+            return GGML_STATUS_FAILED;
+        }
+        hrx_buffer_ref_t compact_bindings[3] = { bindings[3], counts_ref, routes_ref };
+        ggml_backend_hrx_compact_moe_routes_constants compact_constants = {
+            constants.n_ids, constants.n_tokens, constants.n_experts, static_cast<int64_t>(route_capacity),
+            constants.ids_nb0, constants.ids_nb1,
+        };
+        const auto & compact_provider = context->device_context->compact_moe_routes_provider;
+        hrx_dispatch_config_t compact_config = {
+            { static_cast<uint32_t>((compact_constants.n_ids * compact_constants.n_tokens + 255) / 256), 1, 1 },
+            { compact_provider.export_info.workgroup_size[0] ? compact_provider.export_info.workgroup_size[0] : 256, 1, 1 },
+            0,
+        };
+        if (!GGML_HRX_CHECK(hrx_stream_dispatch(
+                context->stream, compact_provider.executable, compact_provider.export_ordinal, &compact_config,
+                &compact_constants, sizeof(compact_constants), compact_bindings, 3, HRX_DISPATCH_FLAG_NONE))) {
+            return GGML_STATUS_FAILED;
+        }
+        hrx_buffer_ref_t src1_compute_ref = bindings[2];
+        if (use_q8_1_x4_mmq) {
+            const int64_t q8_1_blocks = constants.n_tokens * constants.n_ids * (constants.k / 32);
+            const size_t q8_1_size = static_cast<size_t>(((q8_1_blocks + 3) / 4) * 144);
+            if (!ggml_backend_hrx_request_scratch_buffer(context, q8_1_size, &src1_compute_ref)) {
+                return GGML_STATUS_FAILED;
+            }
+            hrx_buffer_ref_t quant_bindings[2] = { bindings[2], src1_compute_ref };
+            ggml_backend_hrx_quantize_q8_1_constants quant_constants = {
+                src1->ne[0],
+                src1->ne[1] == 1 ? 0 : static_cast<int64_t>(src1->nb[1] / sizeof(float)),
+                static_cast<int64_t>(src1->nb[2] / sizeof(float)),
+                static_cast<int64_t>(src1->nb[3] / sizeof(float)),
+                constants.k,
+                constants.n_ids,
+                constants.n_tokens,
+            };
+            const auto & quant_provider = context->device_context->quantize_q8_1_x4_provider;
+            hrx_dispatch_config_t quant_config = {
+                { static_cast<uint32_t>((quant_constants.ne0 + 127) / 128),
+                  static_cast<uint32_t>(quant_constants.ne1),
+                  static_cast<uint32_t>(quant_constants.ne2) },
+                { quant_provider.export_info.workgroup_size[0] ? quant_provider.export_info.workgroup_size[0] : 128, 1, 1 },
+                0,
+            };
+            if (!GGML_HRX_CHECK(hrx_stream_dispatch(
+                    context->stream, quant_provider.executable, quant_provider.export_ordinal, &quant_config,
+                    &quant_constants, sizeof(quant_constants), quant_bindings, 2, HRX_DISPATCH_FLAG_NONE))) {
+                return GGML_STATUS_FAILED;
+            }
+        }
+        hrx_buffer_ref_t grouped_bindings[6] = {
+            bindings[0], bindings[1], src1_compute_ref, counts_ref, routes_ref, bindings[4] };
+        ggml_backend_hrx_mul_mat_id_q4_k_swiglu_grouped_constants grouped_constants = {
+            constants.k, constants.rows, constants.n_ids, constants.n_tokens, constants.n_experts,
+            static_cast<int64_t>(route_capacity), constants.gate_nb1, constants.gate_nb2, constants.up_nb1,
+            constants.up_nb2, constants.src1_nb1, constants.src1_nb2, constants.dst_nb1, constants.dst_nb2,
+        };
+        hrx_dispatch_config_t grouped_config = {
+            { static_cast<uint32_t>(use_q8_1_x4_mmq ? (grouped_constants.rows + 15) / 16 : (grouped_constants.rows + 1) / 2),
+              static_cast<uint32_t>(use_q8_1_x4_mmq ? (grouped_constants.n_tokens + 31) / 32 : grouped_constants.n_experts),
+              static_cast<uint32_t>(use_q8_1_x4_mmq ? grouped_constants.n_experts : 1) },
+            { provider->export_info.workgroup_size[0] ? provider->export_info.workgroup_size[0] : 64, 1, 1 },
+            0,
+        };
+        return GGML_HRX_CHECK(hrx_stream_dispatch(
+            context->stream, provider->executable, provider->export_ordinal, &grouped_config,
+            &grouped_constants, sizeof(grouped_constants), grouped_bindings, 6, HRX_DISPATCH_FLAG_NONE)) ?
+            GGML_STATUS_SUCCESS : GGML_STATUS_FAILED;
+    }
+    const bool row4 = provider == &context->device_context->mul_mat_id_q4_k_swiglu_row4_wg64_provider;
+    hrx_dispatch_config_t config = {
+        { static_cast<uint32_t>(row4 ? (constants.rows + 3) / 4 : constants.rows),
+          static_cast<uint32_t>(constants.n_ids * constants.n_tokens), 1 },
+        { provider->export_info.workgroup_size[0] ? provider->export_info.workgroup_size[0] : 256, 1, 1 },
+        0,
+    };
+    return GGML_HRX_CHECK(hrx_stream_dispatch(
+        context->stream, provider->executable, provider->export_ordinal, &config,
+        &constants, sizeof(constants), bindings, 5, HRX_DISPATCH_FLAG_NONE)) ?
+        GGML_STATUS_SUCCESS : GGML_STATUS_FAILED;
 }
 
 static ggml_status ggml_backend_hrx_dispatch_flash_attn_ext_f32_decode(
@@ -5688,6 +6466,47 @@ static ggml_status ggml_backend_hrx_graph_compute(ggml_backend_t backend, ggml_c
             i = ssm_update.last_idx;
             continue;
         }
+        if (node->op == GGML_OP_MUL_MAT_ID &&
+            !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_FUSION") &&
+            !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_MUL_MAT_ID_SWIGLU_FUSION") &&
+            i + 2 < cgraph->n_nodes &&
+            cgraph->nodes[i + 1]->op == GGML_OP_MUL_MAT_ID &&
+            cgraph->nodes[i + 2]->op == GGML_OP_GLU) {
+            const ggml_tensor * first = node;
+            const ggml_tensor * second = cgraph->nodes[i + 1];
+            const ggml_tensor * swiglu = cgraph->nodes[i + 2];
+            const ggml_tensor * gate = swiglu->src[0];
+            const ggml_tensor * up = swiglu->src[1];
+            if (((gate == first && up == second) || (gate == second && up == first)) &&
+                ggml_backend_hrx_supports_mul_mat_id_q4_k_swiglu(context->device_context, gate, up, swiglu) &&
+                ggml_can_fuse_subgraph(
+                    cgraph, i, { GGML_OP_MUL_MAT_ID, GGML_OP_MUL_MAT_ID, GGML_OP_GLU }, { i + 2 })) {
+                if (ggml_backend_hrx_dispatch_mul_mat_id_q4_k_swiglu(context, gate, up, swiglu) !=
+                    GGML_STATUS_SUCCESS) {
+                    return GGML_STATUS_FAILED;
+                }
+                i += 2;
+                continue;
+            }
+        }
+        if (node->op == GGML_OP_MUL_MAT_ID &&
+            !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_FUSION") &&
+            !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_MUL_MAT_ID_MUL_FUSION") &&
+            i + 1 < cgraph->n_nodes &&
+            cgraph->nodes[i + 1]->op == GGML_OP_MUL &&
+            ggml_backend_hrx_supports_mul_mat_id_q4_k_mul(context->device_context, node, cgraph->nodes[i + 1]) &&
+            ggml_can_fuse_subgraph(cgraph, i, { GGML_OP_MUL_MAT_ID, GGML_OP_MUL }, { i + 1 })) {
+            const ggml_tensor * mul = cgraph->nodes[i + 1];
+            const ggml_status status =
+                ggml_backend_hrx_supports_mul_mat_id_q4_k_mul_q8_1(context->device_context, node, mul) ?
+                    ggml_backend_hrx_dispatch_mul_mat_id_q4_k_mul_q8_1(context, node, mul) :
+                    ggml_backend_hrx_dispatch_mul_mat_id_q4_k_mul(context, node, mul);
+            if (status != GGML_STATUS_SUCCESS) {
+                return GGML_STATUS_FAILED;
+            }
+            i++;
+            continue;
+        }
         if (node->op == GGML_OP_MUL && !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_FUSION")) {
             std::array<const ggml_tensor *, 8> sources = {};
             const ggml_tensor * sum8 = nullptr;
@@ -5962,7 +6781,9 @@ static ggml_status ggml_backend_hrx_graph_compute(ggml_backend_t backend, ggml_c
                     GGML_LOG_ERROR("%s: MUL_MAT_ID shape/type/layout is unsupported\n", __func__);
                     return GGML_STATUS_FAILED;
                 }
-                if (ggml_backend_hrx_dispatch_mul_mat_id_q4_k(context, node) != GGML_STATUS_SUCCESS) {
+                if ((ggml_backend_hrx_supports_mul_mat_id_q4_k_q8_1(context->device_context, node) ?
+                        ggml_backend_hrx_dispatch_mul_mat_id_q4_k_q8_1(context, node) :
+                        ggml_backend_hrx_dispatch_mul_mat_id_q4_k(context, node)) != GGML_STATUS_SUCCESS) {
                     return GGML_STATUS_FAILED;
                 }
                 break;
