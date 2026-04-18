@@ -3859,12 +3859,28 @@ int main() {
         run_mul_mat_vec_case(
             backend.get(), dev, GGML_TYPE_Q5_K, 2 * ggml_blck_size(GGML_TYPE_Q5_K), 2, 3,
             5.0e-4f, "mul_mat_vec_q5_k_two_blocks");
+        {
+            scoped_env_var force_q5_wg64("GGML_HRX_MUL_MAT_VEC_K_WG", "64");
+            run_mul_mat_vec_case(
+                backend.get(), dev, GGML_TYPE_Q5_K, 2 * ggml_blck_size(GGML_TYPE_Q5_K), 3, 1,
+                5.0e-4f, "mul_mat_vec_q5_k_wg64_decode");
+        }
         run_mul_mat_vec_case(
             backend.get(), dev, GGML_TYPE_Q6_K, ggml_blck_size(GGML_TYPE_Q6_K), 3, 1,
-            4.0e-4f, "mul_mat_vec_q6_k_one_block");
+            4.0e-4f, "mul_mat_vec_q6_k_rows2_cols1_decode");
         run_mul_mat_vec_case(
             backend.get(), dev, GGML_TYPE_Q6_K, 2 * ggml_blck_size(GGML_TYPE_Q6_K), 2, 3,
             5.0e-4f, "mul_mat_vec_q6_k_two_blocks");
+        run_mul_mat_vec_case(
+            backend.get(), dev, GGML_TYPE_Q6_K, ggml_blck_size(GGML_TYPE_Q6_K), 2, 512,
+            5.0e-4f, "mul_mat_vec_q6_k_rows2_cols8_prompt");
+        {
+            scoped_env_var disable_q6_rows2("GGML_HRX_DISABLE_Q6_K_ROWS2_COLS1_DECODE", "1");
+            scoped_env_var force_q6_wg64("GGML_HRX_MUL_MAT_VEC_Q6_K_WG", "64");
+            run_mul_mat_vec_case(
+                backend.get(), dev, GGML_TYPE_Q6_K, 2 * ggml_blck_size(GGML_TYPE_Q6_K), 3, 1,
+                5.0e-4f, "mul_mat_vec_q6_k_wg64_decode");
+        }
         run_mul_mat_vec_case(
             backend.get(), dev, GGML_TYPE_Q8_0, ggml_blck_size(GGML_TYPE_Q8_0), 3, 1,
             4.0e-4f, "mul_mat_vec_q8_0_one_block");

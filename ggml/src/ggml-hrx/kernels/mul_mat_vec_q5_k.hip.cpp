@@ -132,3 +132,15 @@ extern "C" __global__ void hrx_mul_mat_vec_q5_k_f32(
         long long k, long long rows, long long cols) {
     hrx_mul_mat_vec_q5_k_f32_impl<256>(src0, src1, dst, k, rows, cols);
 }
+
+extern "C" __global__ void hrx_mul_mat_vec_q5_k_wg128_f32(
+        const hrx_block_q5_K * src0, const float * src1, float * dst,
+        long long k, long long rows, long long cols) {
+    hrx_mul_mat_vec_q5_k_f32_impl<128>(src0, src1, dst, k, rows, cols);
+}
+
+extern "C" __global__ void hrx_mul_mat_vec_q5_k_wg64_f32(
+        const hrx_block_q5_K * src0, const float * src1, float * dst,
+        long long k, long long rows, long long cols) {
+    hrx_mul_mat_vec_q5_k_f32_impl<64>(src0, src1, dst, k, rows, cols);
+}
