@@ -3,6 +3,7 @@
 #include <ggml-cpp.h>
 #include <ggml-hrx.h>
 
+#include <cinttypes>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -29,6 +30,41 @@ static void expect_eq(const std::vector<float> & actual, const std::vector<float
             std::abort();
         }
     }
+}
+
+static void run_add_case(ggml_backend_t backend, int64_t n) {
+    ggml_context_ptr ctx = make_context();
+    ggml_tensor * lhs = ggml_new_tensor_1d(ctx.get(), GGML_TYPE_F32, n);
+    ggml_tensor * rhs = ggml_new_tensor_1d(ctx.get(), GGML_TYPE_F32, n);
+    ggml_tensor * sum = ggml_add(ctx.get(), lhs, rhs);
+
+    ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 16, false);
+    ggml_build_forward_expand(graph, sum);
+
+    ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
+    GGML_ASSERT(buffer != nullptr);
+
+    std::vector<float> lhs_data(n);
+    std::vector<float> rhs_data(n);
+    std::vector<float> expected(n);
+    for (int64_t i = 0; i < n; ++i) {
+        lhs_data[i] = static_cast<float>(i % 17) - 8.0f;
+        rhs_data[i] = static_cast<float>(i % 11) * 0.5f;
+        expected[i] = lhs_data[i] + rhs_data[i];
+    }
+
+    ggml_backend_tensor_set(lhs, lhs_data.data(), 0, lhs_data.size() * sizeof(float));
+    ggml_backend_tensor_set(rhs, rhs_data.data(), 0, rhs_data.size() * sizeof(float));
+
+    const ggml_status status = ggml_backend_graph_compute(backend, graph);
+    if (status != GGML_STATUS_SUCCESS) {
+        std::fprintf(stderr, "ADD graph failed for n=%" PRId64 ": %s\n", n, ggml_status_to_string(status));
+        std::abort();
+    }
+
+    std::vector<float> actual(n, -1.0f);
+    ggml_backend_tensor_get(sum, actual.data(), 0, actual.size() * sizeof(float));
+    expect_eq(actual, expected, "add");
 }
 
 } // namespace
@@ -145,6 +181,12 @@ int main() {
     std::vector<float> graph_reshape_data(graph_input.size(), -1.0f);
     ggml_backend_tensor_get(graph_reshape, graph_reshape_data.data(), 0, graph_reshape_data.size() * sizeof(float));
     expect_eq(graph_reshape_data, graph_input, "graph_reshape_data");
+
+    run_add_case(backend.get(), 1);
+    run_add_case(backend.get(), 255);
+    run_add_case(backend.get(), 256);
+    run_add_case(backend.get(), 257);
+    run_add_case(backend.get(), 1025);
 
     ggml_backend_synchronize(backend.get());
     return 0;

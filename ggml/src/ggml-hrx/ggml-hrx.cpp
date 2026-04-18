@@ -3,6 +3,7 @@
 #include "ggml-backend-impl.h"
 #include "ggml-impl.h"
 
+#include "kernels/hrx_kernel_catalog.h"
 #include "hrx_runtime.h"
 
 #include <algorithm>
@@ -37,6 +38,42 @@ struct ggml_backend_hrx_staging_arena {
     std::vector<hrx_buffer_t> retired_buffers;
 };
 
+enum class ggml_backend_hrx_provider_kind {
+    none,
+    hsaco,
+};
+
+struct ggml_backend_hrx_op_provider {
+    ggml_backend_hrx_provider_kind kind = ggml_backend_hrx_provider_kind::none;
+    hrx_executable_t executable = nullptr;
+    uint32_t export_ordinal = 0;
+    hrx_executable_export_info_t export_info = {};
+
+    ggml_backend_hrx_op_provider() = default;
+    ggml_backend_hrx_op_provider(const ggml_backend_hrx_op_provider &) = delete;
+    ggml_backend_hrx_op_provider & operator=(const ggml_backend_hrx_op_provider &) = delete;
+
+    void reset() {
+        if (executable) {
+            hrx_executable_release(executable);
+        }
+        kind = ggml_backend_hrx_provider_kind::none;
+        executable = nullptr;
+        export_ordinal = 0;
+        export_info = {};
+    }
+
+    ~ggml_backend_hrx_op_provider() {
+        reset();
+    }
+};
+
+struct ggml_backend_hrx_elementwise_constants {
+    int64_t n;
+};
+
+static_assert(sizeof(ggml_backend_hrx_elementwise_constants) == 8);
+
 struct ggml_backend_hrx_device_context {
     hrx_device_t device = nullptr;
     hrx_stream_t active_stream = nullptr;
@@ -48,6 +85,7 @@ struct ggml_backend_hrx_device_context {
     std::string description;
     std::string architecture;
     size_t memory_total = 0;
+    ggml_backend_hrx_op_provider add_provider;
 };
 
 static void ggml_backend_hrx_unregister_stream(ggml_backend_hrx_device_context * device_context, hrx_stream_t stream);
@@ -59,6 +97,9 @@ struct ggml_backend_hrx_reg_context {
 
     ~ggml_backend_hrx_reg_context() {
         for (auto & device_context : device_contexts) {
+            if (device_context) {
+                device_context->add_provider.reset();
+            }
             if (device_context && device_context->transfer_stream) {
                 hrx_status_t status = hrx_stream_synchronize(device_context->transfer_stream);
                 if (!hrx_status_is_ok(status)) {
@@ -161,8 +202,39 @@ static ggml_backend_hrx_buffer_context * ggml_backend_hrx_get_buffer_context(ggm
     return static_cast<ggml_backend_hrx_buffer_context *>(buffer->context);
 }
 
+static void * ggml_backend_hrx_buffer_get_base(ggml_backend_buffer_t buffer);
+
 static size_t ggml_backend_hrx_tensor_offset(const ggml_backend_hrx_buffer_context * context, const ggml_tensor * tensor) {
     return static_cast<size_t>(static_cast<const uint8_t *>(tensor->data) - context->base);
+}
+
+static bool ggml_backend_hrx_tensor_buffer_ref(
+        const ggml_tensor * tensor, hrx_buffer_ref_t * out_ref) {
+    ggml_backend_buffer_t buffer = tensor->view_src ? tensor->view_src->buffer : tensor->buffer;
+    if (!buffer || buffer->iface.get_base != ggml_backend_hrx_buffer_get_base) {
+        return false;
+    }
+
+    auto * context = ggml_backend_hrx_get_buffer_context(buffer);
+    if (!context->buffer) {
+        return false;
+    }
+
+    const size_t offset = ggml_backend_hrx_tensor_offset(context, tensor);
+    const size_t length = ggml_nbytes(tensor);
+    if (offset > buffer->size || length > buffer->size - offset) {
+        GGML_LOG_ERROR(
+            "%s: tensor %s has out-of-bounds HRX buffer ref: offset=%zu length=%zu buffer_size=%zu\n",
+            __func__, tensor->name, offset, length, buffer->size);
+        return false;
+    }
+
+    *out_ref = {
+        /* .buffer = */ context->buffer,
+        /* .offset = */ offset,
+        /* .length = */ length,
+    };
+    return true;
 }
 
 static void ggml_backend_hrx_register_stream(ggml_backend_hrx_device_context * device_context, hrx_stream_t stream) {
@@ -630,6 +702,71 @@ static std::string ggml_backend_hrx_device_description(hrx_device_t device) {
     return description.empty() ? std::string("HRX GPU") : description;
 }
 
+static const char * ggml_backend_hrx_kernel_gfx_target(const ggml_backend_hrx_device_context * device_context) {
+    GGML_UNUSED(device_context);
+    return "gfx1100";
+}
+
+static bool ggml_backend_hrx_load_catalog_provider(
+        ggml_backend_hrx_device_context * device_context,
+        const char * name,
+        ggml_backend_hrx_op_provider * provider) {
+    const ggml_hrx_kernel_entry * entry =
+        ggml_hrx_kernel_catalog_find(name, ggml_backend_hrx_kernel_gfx_target(device_context));
+    if (!entry || !entry->data || entry->data_size == 0) {
+        return false;
+    }
+
+    hrx_executable_t executable = nullptr;
+    if (!GGML_HRX_CHECK(hrx_executable_load_data(
+            device_context->device, entry->data, entry->data_size, entry->format, &executable))) {
+        GGML_LOG_WARN("%s: failed to load HRX catalog kernel %s for %s\n",
+            __func__, entry->name, ggml_backend_hrx_kernel_gfx_target(device_context));
+        return false;
+    }
+
+    uint32_t export_ordinal = 0;
+    hrx_executable_export_info_t export_info = {};
+    const bool ok = GGML_HRX_CHECK(hrx_executable_lookup_export_by_name(
+                        executable, entry->name, &export_ordinal)) &&
+                    GGML_HRX_CHECK(hrx_executable_export_info(
+                        executable, export_ordinal, &export_info)) &&
+                    export_info.binding_count == entry->binding_count &&
+                    export_info.parameter_count == entry->binding_count + 1 &&
+                    export_info.constant_count * sizeof(uint32_t) == entry->constants_size &&
+                    entry->constants_size == sizeof(ggml_backend_hrx_elementwise_constants);
+    if (!ok) {
+        GGML_LOG_WARN(
+            "%s: HRX catalog kernel %s has unsupported ABI "
+            "(bindings=%u expected=%u constants=%u constants_size=%u parameters=%u workgroup=%ux%ux%u)\n",
+            __func__,
+            entry->name,
+            export_info.binding_count,
+            entry->binding_count,
+            export_info.constant_count,
+            entry->constants_size,
+            export_info.parameter_count,
+            export_info.workgroup_size[0],
+            export_info.workgroup_size[1],
+            export_info.workgroup_size[2]);
+        hrx_executable_release(executable);
+        return false;
+    }
+
+    provider->kind = ggml_backend_hrx_provider_kind::hsaco;
+    provider->executable = executable;
+    provider->export_ordinal = export_ordinal;
+    provider->export_info = export_info;
+    provider->export_info.workgroup_size[0] = entry->workgroup_size[0];
+    provider->export_info.workgroup_size[1] = entry->workgroup_size[1];
+    provider->export_info.workgroup_size[2] = entry->workgroup_size[2];
+    return true;
+}
+
+static bool ggml_backend_hrx_load_add_provider(ggml_backend_hrx_device_context * device_context) {
+    return ggml_backend_hrx_load_catalog_provider(device_context, "hrx_add_f32", &device_context->add_provider);
+}
+
 static const char * ggml_backend_hrx_buffer_type_get_name(ggml_backend_buffer_type_t buft) {
     return ggml_backend_hrx_get_buft_context(buft)->name.c_str();
 }
@@ -859,6 +996,69 @@ static void ggml_backend_hrx_synchronize(ggml_backend_t backend) {
     }
 }
 
+static bool ggml_backend_hrx_supports_add(
+        const ggml_backend_hrx_device_context * device_context,
+        const ggml_tensor * op) {
+    const ggml_tensor * src0 = op->src[0];
+    const ggml_tensor * src1 = op->src[1];
+    return device_context->add_provider.kind == ggml_backend_hrx_provider_kind::hsaco &&
+           src0 && src1 &&
+           src0->type == GGML_TYPE_F32 &&
+           src1->type == GGML_TYPE_F32 &&
+           op->type == GGML_TYPE_F32 &&
+           ggml_are_same_shape(src0, src1) &&
+           ggml_are_same_shape(src0, op) &&
+           ggml_is_contiguous(src0) &&
+           ggml_is_contiguous(src1) &&
+           ggml_is_contiguous(op);
+}
+
+static ggml_status ggml_backend_hrx_dispatch_add(ggml_backend_hrx_context * context, const ggml_tensor * dst) {
+    const ggml_tensor * src0 = dst->src[0];
+    const ggml_tensor * src1 = dst->src[1];
+    hrx_buffer_ref_t bindings[3] = {};
+    if (!ggml_backend_hrx_tensor_buffer_ref(src0, &bindings[0]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(src1, &bindings[1]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(dst, &bindings[2])) {
+        GGML_LOG_ERROR("%s: ADD tensor is not backed by a HRX buffer\n", __func__);
+        return GGML_STATUS_FAILED;
+    }
+
+    const auto & provider = context->device_context->add_provider;
+    ggml_backend_hrx_elementwise_constants constants = {
+        /* .n = */ ggml_nelements(dst),
+    };
+    const uint32_t workgroup_size = provider.export_info.workgroup_size[0] ?
+        provider.export_info.workgroup_size[0] : 256;
+    hrx_dispatch_config_t config = {
+        /* .workgroup_count = */ {
+            static_cast<uint32_t>((constants.n + workgroup_size - 1) / workgroup_size),
+            1,
+            1,
+        },
+        /* .workgroup_size = */ {
+            workgroup_size,
+            1,
+            1,
+        },
+        /* .subgroup_size = */ 0,
+    };
+
+    if (!GGML_HRX_CHECK(hrx_stream_dispatch(
+            context->stream,
+            provider.executable,
+            provider.export_ordinal,
+            &config,
+            &constants,
+            sizeof(constants),
+            bindings,
+            3,
+            HRX_DISPATCH_FLAG_NONE))) {
+        return GGML_STATUS_FAILED;
+    }
+    return GGML_STATUS_SUCCESS;
+}
+
 static ggml_status ggml_backend_hrx_graph_compute(ggml_backend_t backend, ggml_cgraph * cgraph) {
     auto * context = static_cast<ggml_backend_hrx_context *>(backend->context);
     if (!ggml_backend_hrx_sync_streams(context->device_context)) {
@@ -877,6 +1077,15 @@ static ggml_status ggml_backend_hrx_graph_compute(ggml_backend_t backend, ggml_c
             case GGML_OP_VIEW:
             case GGML_OP_PERMUTE:
             case GGML_OP_TRANSPOSE:
+                break;
+            case GGML_OP_ADD:
+                if (!ggml_backend_hrx_supports_add(context->device_context, node)) {
+                    GGML_LOG_ERROR("%s: ADD shape/type/layout is unsupported\n", __func__);
+                    return GGML_STATUS_FAILED;
+                }
+                if (ggml_backend_hrx_dispatch_add(context, node) != GGML_STATUS_SUCCESS) {
+                    return GGML_STATUS_FAILED;
+                }
                 break;
             default:
                 GGML_LOG_ERROR("%s: unsupported op %s\n", __func__, ggml_op_desc(node));
@@ -982,6 +1191,8 @@ static bool ggml_backend_hrx_device_supports_op(ggml_backend_dev_t dev, const gg
         case GGML_OP_PERMUTE:
         case GGML_OP_TRANSPOSE:
             return true;
+        case GGML_OP_ADD:
+            return ggml_backend_hrx_supports_add(ggml_backend_hrx_get_device_context(dev), op);
         default:
             return false;
     }
@@ -1083,6 +1294,7 @@ static std::unique_ptr<ggml_backend_hrx_reg_context> ggml_backend_hrx_create_reg
             continue;
         }
         ggml_backend_hrx_register_stream(device_context.get(), device_context->transfer_stream);
+        (void) ggml_backend_hrx_load_add_provider(device_context.get());
 
         context->device_contexts.emplace_back(std::move(device_context));
         context->devices.push_back({
