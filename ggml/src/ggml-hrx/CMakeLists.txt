@@ -31,7 +31,72 @@ set(GGML_HRX_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(GGML_HRX_HSACO_ROOT "${GGML_HRX_GENERATED_DIR}/hsaco")
 set(GGML_HRX_KERNEL_CATALOG_CPP "${GGML_HRX_GENERATED_DIR}/hrx_kernel_catalog.cpp")
 set(GGML_HRX_KERNEL_GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/kernels/generate_hrx_kernels.py")
-set(GGML_HRX_KERNEL_SOURCES
+
+set(GGML_HRX_AMDGPU_TARGET_LIST_CANONICAL)
+set(GGML_HRX_CATALOG_ARCH_ARGS)
+foreach(GGML_HRX_AMDGPU_TARGET IN LISTS GGML_HRX_AMDGPU_TARGET_LIST)
+    string(STRIP "${GGML_HRX_AMDGPU_TARGET}" GGML_HRX_AMDGPU_TARGET)
+    if (GGML_HRX_AMDGPU_TARGET STREQUAL "")
+        continue()
+    endif()
+    list(APPEND GGML_HRX_AMDGPU_TARGET_LIST_CANONICAL "${GGML_HRX_AMDGPU_TARGET}")
+    list(APPEND GGML_HRX_CATALOG_ARCH_ARGS --arch "${GGML_HRX_AMDGPU_TARGET}")
+endforeach()
+
+if (NOT GGML_HRX_AMDGPU_TARGET_LIST_CANONICAL)
+    message(FATAL_ERROR "GGML_HRX_AMDGPU_TARGETS must contain at least one target")
+endif()
+
+file(MAKE_DIRECTORY "${GGML_HRX_GENERATED_DIR}" "${GGML_HRX_HSACO_ROOT}")
+set(GGML_HRX_HSACO_OUTPUTS)
+
+function(ggml_hrx_add_kernel_source)
+    cmake_parse_arguments(ARG "" "SOURCE;WAVEFRONT_SIZE" "DEPS;FLAGS" ${ARGN})
+    if (NOT ARG_SOURCE)
+        message(FATAL_ERROR "ggml_hrx_add_kernel_source requires SOURCE")
+    endif()
+    if (NOT ARG_WAVEFRONT_SIZE)
+        message(FATAL_ERROR "ggml_hrx_add_kernel_source requires WAVEFRONT_SIZE")
+    endif()
+    if (NOT ARG_WAVEFRONT_SIZE STREQUAL "32" AND NOT ARG_WAVEFRONT_SIZE STREQUAL "64")
+        message(FATAL_ERROR "unsupported HRX kernel wavefront size: ${ARG_WAVEFRONT_SIZE}")
+    endif()
+
+    get_filename_component(GGML_HRX_KERNEL_SOURCE_NAME "${ARG_SOURCE}" NAME)
+    string(REPLACE ".hip.cpp" ".hsaco" GGML_HRX_HSACO_NAME "${GGML_HRX_KERNEL_SOURCE_NAME}")
+
+    set(GGML_HRX_KERNEL_COMPILE_FLAGS)
+    if (ARG_WAVEFRONT_SIZE STREQUAL "32")
+        list(APPEND GGML_HRX_KERNEL_COMPILE_FLAGS -mno-wavefrontsize64)
+    else()
+        list(APPEND GGML_HRX_KERNEL_COMPILE_FLAGS -mwavefrontsize64)
+    endif()
+    list(APPEND GGML_HRX_KERNEL_COMPILE_FLAGS ${ARG_FLAGS})
+
+    foreach(GGML_HRX_AMDGPU_TARGET IN LISTS GGML_HRX_AMDGPU_TARGET_LIST_CANONICAL)
+        set(GGML_HRX_HSACO_DIR "${GGML_HRX_HSACO_ROOT}/${GGML_HRX_AMDGPU_TARGET}")
+        set(GGML_HRX_HSACO_OUTPUT "${GGML_HRX_HSACO_DIR}/${GGML_HRX_HSACO_NAME}")
+        file(MAKE_DIRECTORY "${GGML_HRX_HSACO_DIR}")
+        add_custom_command(
+            OUTPUT "${GGML_HRX_HSACO_OUTPUT}"
+            COMMAND "${GGML_HRX_CLANGXX}"
+                -x hip
+                --offload-device-only
+                --no-gpu-bundle-output
+                "--offload-arch=${GGML_HRX_AMDGPU_TARGET}"
+                -O2
+                ${GGML_HRX_KERNEL_COMPILE_FLAGS}
+                -c "${ARG_SOURCE}"
+                -o "${GGML_HRX_HSACO_OUTPUT}"
+            DEPENDS "${ARG_SOURCE}" ${ARG_DEPS}
+            VERBATIM
+        )
+        list(APPEND GGML_HRX_HSACO_OUTPUTS "${GGML_HRX_HSACO_OUTPUT}")
+    endforeach()
+    set(GGML_HRX_HSACO_OUTPUTS "${GGML_HRX_HSACO_OUTPUTS}" PARENT_SCOPE)
+endfunction()
+
+set(GGML_HRX_WAVE32_KERNEL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/add_f32.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/add_f32_broadcast.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/argsort_f32.hip.cpp"
@@ -60,9 +125,7 @@ set(GGML_HRX_KERNEL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q4_k.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q4_k_q8_1.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q5_k.hip.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q5_k_q8_1.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q6_k.hip.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q6_k_q8_1.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q8_0.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/quantize_q8_1.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/rms_norm.hip.cpp"
@@ -74,60 +137,56 @@ set(GGML_HRX_KERNEL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/set_rows_f32_q4_0.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/set_rows_f32_q8_0.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/soft_max_f32.hip.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/ssm_conv_f32.hip.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/topk_moe_f32_shared.hip.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/topk_moe_f32_wave32.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/unary_f32.hip.cpp")
-file(MAKE_DIRECTORY "${GGML_HRX_GENERATED_DIR}" "${GGML_HRX_HSACO_ROOT}")
 
-set(GGML_HRX_HSACO_OUTPUTS)
-foreach(GGML_HRX_AMDGPU_TARGET IN LISTS GGML_HRX_AMDGPU_TARGET_LIST)
-    string(STRIP "${GGML_HRX_AMDGPU_TARGET}" GGML_HRX_AMDGPU_TARGET)
-    if (GGML_HRX_AMDGPU_TARGET STREQUAL "")
-        continue()
-    endif()
+set(GGML_HRX_WAVE64_KERNEL_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/ssm_conv_f32.hip.cpp"
+)
 
-    set(GGML_HRX_HSACO_DIR "${GGML_HRX_HSACO_ROOT}/${GGML_HRX_AMDGPU_TARGET}")
-    file(MAKE_DIRECTORY "${GGML_HRX_HSACO_DIR}")
-    foreach(GGML_HRX_KERNEL_SOURCE IN LISTS GGML_HRX_KERNEL_SOURCES)
-        get_filename_component(GGML_HRX_KERNEL_SOURCE_NAME "${GGML_HRX_KERNEL_SOURCE}" NAME)
-        string(REPLACE ".hip.cpp" ".hsaco" GGML_HRX_HSACO_NAME "${GGML_HRX_KERNEL_SOURCE_NAME}")
-        set(GGML_HRX_HSACO_OUTPUT "${GGML_HRX_HSACO_DIR}/${GGML_HRX_HSACO_NAME}")
-        set(GGML_HRX_KERNEL_DEPS "${GGML_HRX_KERNEL_SOURCE}")
-        if (GGML_HRX_KERNEL_SOURCE_NAME MATCHES "^topk_moe_f32_")
-            list(APPEND GGML_HRX_KERNEL_DEPS
-                "${CMAKE_CURRENT_SOURCE_DIR}/kernels/topk_moe_f32_common.hip.inc")
-        endif()
-        if (GGML_HRX_KERNEL_SOURCE_NAME MATCHES "^topk_moe_f32_wave")
-            list(APPEND GGML_HRX_KERNEL_DEPS
-                "${CMAKE_CURRENT_SOURCE_DIR}/kernels/topk_moe_f32_wave.inc")
-        endif()
-        set(GGML_HRX_KERNEL_COMPILE_FLAGS)
-        if (GGML_HRX_KERNEL_SOURCE_NAME STREQUAL "topk_moe_f32_wave32.hip.cpp")
-            list(APPEND GGML_HRX_KERNEL_COMPILE_FLAGS -mno-wavefrontsize64)
-        endif()
-        add_custom_command(
-            OUTPUT "${GGML_HRX_HSACO_OUTPUT}"
-            COMMAND "${GGML_HRX_CLANGXX}"
-                -x hip
-                --offload-device-only
-                --no-gpu-bundle-output
-                "--offload-arch=${GGML_HRX_AMDGPU_TARGET}"
-                -O2
-                ${GGML_HRX_KERNEL_COMPILE_FLAGS}
-                -c "${GGML_HRX_KERNEL_SOURCE}"
-                -o "${GGML_HRX_HSACO_OUTPUT}"
-            DEPENDS ${GGML_HRX_KERNEL_DEPS}
-            VERBATIM
-        )
-        list(APPEND GGML_HRX_HSACO_OUTPUTS "${GGML_HRX_HSACO_OUTPUT}")
-    endforeach()
-    list(APPEND GGML_HRX_CATALOG_ARCH_ARGS --arch "${GGML_HRX_AMDGPU_TARGET}")
+foreach(GGML_HRX_KERNEL_SOURCE IN LISTS GGML_HRX_WAVE32_KERNEL_SOURCES)
+    ggml_hrx_add_kernel_source(SOURCE "${GGML_HRX_KERNEL_SOURCE}" WAVEFRONT_SIZE 32)
 endforeach()
 
-if (NOT GGML_HRX_HSACO_OUTPUTS)
-    message(FATAL_ERROR "GGML_HRX_AMDGPU_TARGETS must contain at least one target")
-endif()
+foreach(GGML_HRX_KERNEL_SOURCE IN LISTS GGML_HRX_WAVE64_KERNEL_SOURCES)
+    ggml_hrx_add_kernel_source(SOURCE "${GGML_HRX_KERNEL_SOURCE}" WAVEFRONT_SIZE 64)
+endforeach()
+
+ggml_hrx_add_kernel_source(
+    SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q5_k_q8_1.hip.cpp"
+    WAVEFRONT_SIZE 32
+    DEPS "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q5_k_q8_1_common.hip.inc"
+    FLAGS -O3
+)
+ggml_hrx_add_kernel_source(
+    SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q5_k_q8_1_wave64.hip.cpp"
+    WAVEFRONT_SIZE 64
+    DEPS "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q5_k_q8_1_common.hip.inc"
+    FLAGS -O3
+)
+ggml_hrx_add_kernel_source(
+    SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q6_k_q8_1.hip.cpp"
+    WAVEFRONT_SIZE 32
+    DEPS "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q6_k_q8_1_common.hip.inc"
+    FLAGS -O3
+)
+ggml_hrx_add_kernel_source(
+    SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q6_k_q8_1_wave64.hip.cpp"
+    WAVEFRONT_SIZE 64
+    DEPS "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q6_k_q8_1_common.hip.inc"
+    FLAGS -O3
+)
+ggml_hrx_add_kernel_source(
+    SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/kernels/topk_moe_f32_shared.hip.cpp"
+    WAVEFRONT_SIZE 32
+    DEPS "${CMAKE_CURRENT_SOURCE_DIR}/kernels/topk_moe_f32_common.hip.inc"
+)
+ggml_hrx_add_kernel_source(
+    SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/kernels/topk_moe_f32_wave32.hip.cpp"
+    WAVEFRONT_SIZE 32
+    DEPS
+        "${CMAKE_CURRENT_SOURCE_DIR}/kernels/topk_moe_f32_common.hip.inc"
+        "${CMAKE_CURRENT_SOURCE_DIR}/kernels/topk_moe_f32_wave.inc"
+)
 
 add_custom_command(
     OUTPUT "${GGML_HRX_KERNEL_CATALOG_CPP}"

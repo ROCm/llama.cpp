@@ -362,7 +362,7 @@ KERNELS = [
     },
     {
         "name": "hrx_mul_mat_vec_q5_k_q8_1_x4_mmql128x128_wg256_f32",
-        "source": "mul_mat_vec_q5_k_q8_1.hip.cpp",
+        "source": "mul_mat_vec_q5_k_q8_1_wave64.hip.cpp",
         "format": None,
         "binding_count": 3,
         "parameter_count": 6,
@@ -371,7 +371,7 @@ KERNELS = [
     },
     {
         "name": "hrx_mul_mat_vec_q5_k_q8_1_x4_mmq64x64_wg256_f32",
-        "source": "mul_mat_vec_q5_k_q8_1.hip.cpp",
+        "source": "mul_mat_vec_q5_k_q8_1_wave64.hip.cpp",
         "format": None,
         "binding_count": 3,
         "parameter_count": 6,
@@ -398,7 +398,7 @@ KERNELS = [
     },
     {
         "name": "hrx_mul_mat_vec_q6_k_q8_1_x4_mmql128x64_wg256_f32",
-        "source": "mul_mat_vec_q6_k_q8_1.hip.cpp",
+        "source": "mul_mat_vec_q6_k_q8_1_wave64.hip.cpp",
         "format": None,
         "binding_count": 3,
         "parameter_count": 6,
