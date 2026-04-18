@@ -1976,7 +1976,6 @@ static void run_bf16_mul_mat_set_rows_fusion_case(ggml_backend_t backend, const 
     ggml_tensor * dst = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F16, 1, DST_ROWS);
     ggml_tensor * rows = ggml_new_tensor_1d(ctx.get(), GGML_TYPE_I64, ROWS);
     ggml_tensor * out = ggml_set_rows(ctx.get(), dst, adapter, rows);
-
     ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 16, false);
     ggml_build_forward_expand(graph, out);
     ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
@@ -2009,6 +2008,56 @@ static void run_bf16_mul_mat_set_rows_fusion_case(ggml_backend_t backend, const 
         expected[static_cast<size_t>(row_ids[row])] = ggml_fp16_to_fp32(ggml_fp32_to_fp16(matmul[row]));
     }
     expect_near(tensor_to_float(out), expected, 0.0f, label);
+}
+
+static void run_q8_0_mul_mat_add_fusion_case(
+        ggml_backend_t backend,
+        int64_t k,
+        int64_t rows,
+        int64_t cols,
+        float tolerance,
+        const char * label) {
+    scoped_env_var disable_add("GGML_HRX_DISABLE_ADD", "1");
+    GGML_ASSERT(k % ggml_blck_size(GGML_TYPE_Q8_0) == 0);
+
+    ggml_context_ptr ctx = make_context();
+    ggml_tensor * lhs = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_Q8_0, k, rows);
+    ggml_tensor * rhs = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, k, cols);
+    ggml_tensor * bias = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, rows, cols);
+    ggml_tensor * mm = ggml_mul_mat(ctx.get(), lhs, rhs);
+    ggml_tensor * out = ggml_add(ctx.get(), mm, bias);
+
+    ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 16, false);
+    ggml_build_forward_expand(graph, out);
+    ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
+    GGML_ASSERT(buffer != nullptr);
+
+    std::vector<float> lhs_f32(static_cast<size_t>(k * rows));
+    std::vector<float> rhs_f32(static_cast<size_t>(k * cols));
+    std::vector<float> bias_f32(static_cast<size_t>(rows * cols));
+    for (size_t i = 0; i < lhs_f32.size(); ++i) {
+        lhs_f32[i] = static_cast<float>(static_cast<int>((i * 17 + 7) % 101) - 50) / 39.0f;
+    }
+    for (size_t i = 0; i < rhs_f32.size(); ++i) {
+        rhs_f32[i] = static_cast<float>(static_cast<int>((i * 13 + 5) % 89) - 44) / 43.0f;
+    }
+    for (size_t i = 0; i < bias_f32.size(); ++i) {
+        bias_f32[i] = static_cast<float>(static_cast<int>((i * 11 + 3) % 31) - 15) / 29.0f;
+    }
+
+    std::vector<float> lhs_reference;
+    std::vector<uint8_t> lhs_storage;
+    prepare_mul_mat_lhs(GGML_TYPE_Q8_0, k, rows, lhs_f32, lhs_reference, lhs_storage);
+    ggml_backend_tensor_set(lhs, lhs_storage.data(), 0, lhs_storage.size());
+    ggml_backend_tensor_set(rhs, rhs_f32.data(), 0, rhs_f32.size() * sizeof(float));
+    ggml_backend_tensor_set(bias, bias_f32.data(), 0, bias_f32.size() * sizeof(float));
+
+    GGML_ASSERT(ggml_backend_graph_compute(backend, graph) == GGML_STATUS_SUCCESS);
+    std::vector<float> expected = reference_mul_mat(lhs_reference, rhs_f32, k, rows, cols);
+    for (size_t i = 0; i < expected.size(); ++i) {
+        expected[i] += bias_f32[i];
+    }
+    expect_near(tensor_to_float(out), expected, tolerance, label);
 }
 
 static void expect_flash_attn_ext_prefill_samples(
@@ -2885,6 +2934,37 @@ int main() {
         run_mul_mat_vec_case(
             backend.get(), dev, GGML_TYPE_Q8_0, 2 * ggml_blck_size(GGML_TYPE_Q8_0), 2, 3,
             5.0e-4f, "mul_mat_vec_q8_0_two_blocks");
+        run_mul_mat_vec_case(
+            backend.get(), dev, GGML_TYPE_Q8_0, 2 * ggml_blck_size(GGML_TYPE_Q8_0), 3, 512,
+            5.0e-4f, "mul_mat_vec_q8_0_cols8_prompt");
+        {
+            scoped_env_var force_q8_1("GGML_HRX_Q8_1_MMVQ", "all");
+            run_mul_mat_vec_case(
+                backend.get(), dev, GGML_TYPE_Q8_0, 4 * ggml_blck_size(GGML_TYPE_Q8_0), 128, 512,
+                1.0e-1f, "mul_mat_vec_q8_0_q8_1_x4_mmq128x32_prompt");
+        }
+        run_q8_0_mul_mat_add_fusion_case(
+            backend.get(), 2 * ggml_blck_size(GGML_TYPE_Q8_0), 3, 1,
+            5.0e-4f, "mul_mat_vec_q8_0_add_scalar");
+        {
+            scoped_env_var disable_x4("GGML_HRX_DISABLE_Q8_0_ADD_Q8_1_X4_MMQ128X32_PROMPT", "1");
+            scoped_env_var disable_rows4("GGML_HRX_DISABLE_Q8_0_ADD_ROWS4_COLS4_PROMPT", "1");
+            run_q8_0_mul_mat_add_fusion_case(
+                backend.get(), 2 * ggml_blck_size(GGML_TYPE_Q8_0), 3, 512,
+                5.0e-4f, "mul_mat_vec_q8_0_add_cols8_prompt");
+        }
+        {
+            scoped_env_var disable_x4("GGML_HRX_DISABLE_Q8_0_ADD_Q8_1_X4_MMQ128X32_PROMPT", "1");
+            run_q8_0_mul_mat_add_fusion_case(
+                backend.get(), 2 * ggml_blck_size(GGML_TYPE_Q8_0), 4, 512,
+                5.0e-4f, "mul_mat_vec_q8_0_add_rows4_cols4_prompt");
+        }
+        {
+            scoped_env_var force_q8_1("GGML_HRX_Q8_1_MMVQ", "all");
+            run_q8_0_mul_mat_add_fusion_case(
+                backend.get(), 4 * ggml_blck_size(GGML_TYPE_Q8_0), 128, 512,
+                1.0e-1f, "mul_mat_vec_q8_0_add_q8_1_x4_mmq128x32_prompt");
+        }
         {
             scoped_env_var disable_wmma("GGML_HRX_DISABLE_BF16_WMMA16_PROMPT", "1");
             scoped_env_var disable_cols32("GGML_HRX_DISABLE_BF16_COLS32_PROMPT", "1");
