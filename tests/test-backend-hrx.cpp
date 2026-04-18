@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <vector>
 
 namespace {
@@ -1481,6 +1482,30 @@ static bool env_enabled(const char * name) {
     return value && value[0] != '\0' && std::strcmp(value, "0") != 0;
 }
 
+class scoped_env_var {
+public:
+    scoped_env_var(const char * name, const char * value) : name(name) {
+        if (const char * existing = std::getenv(name)) {
+            old_value = existing;
+            had_value = true;
+        }
+        ::setenv(name, value, 1);
+    }
+
+    ~scoped_env_var() {
+        if (had_value) {
+            ::setenv(name, old_value.c_str(), 1);
+        } else {
+            ::unsetenv(name);
+        }
+    }
+
+private:
+    const char * name;
+    bool had_value = false;
+    std::string old_value;
+};
+
 } // namespace
 
 int main() {
@@ -1664,6 +1689,15 @@ int main() {
         run_mul_mat_vec_case(
             backend.get(), dev, GGML_TYPE_Q4_K, 2 * ggml_blck_size(GGML_TYPE_Q4_K), 2, 3,
             5.0e-4f, "mul_mat_vec_q4_k_two_blocks");
+        {
+            scoped_env_var force_q8_1("GGML_HRX_Q8_1_MMVQ", "all");
+            run_mul_mat_vec_case(
+                backend.get(), dev, GGML_TYPE_Q4_K, ggml_blck_size(GGML_TYPE_Q4_K), 3, 1,
+                8.0e-2f, "mul_mat_vec_q4_k_q8_1_one_col");
+            run_mul_mat_vec_case(
+                backend.get(), dev, GGML_TYPE_Q4_K, 2 * ggml_blck_size(GGML_TYPE_Q4_K), 2, 3,
+                1.0e-1f, "mul_mat_vec_q4_k_q8_1_multi_col");
+        }
         run_mul_mat_vec_case(
             backend.get(), dev, GGML_TYPE_Q5_K, ggml_blck_size(GGML_TYPE_Q5_K), 3, 1,
             4.0e-4f, "mul_mat_vec_q5_k_one_block");
