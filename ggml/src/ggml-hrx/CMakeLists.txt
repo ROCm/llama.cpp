@@ -108,6 +108,8 @@ set(GGML_HRX_WAVE32_KERNEL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/div_f32_broadcast.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/flash_attn_ext_f32_bf16_decode.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/flash_attn_ext_f32_f16_decode.hip.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/flash_attn_ext_f32_f16_prefill_tile8.hip.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/flash_attn_ext_f32_f16_prefill_wmma16.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/flash_attn_ext_f32_f32_decode.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/flash_attn_ext_f32_q4_0_decode.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/flash_attn_ext_f32_q8_0_decode.hip.cpp"
@@ -155,6 +157,13 @@ foreach(GGML_HRX_KERNEL_SOURCE IN LISTS GGML_HRX_WAVE64_KERNEL_SOURCES)
     ggml_hrx_add_kernel_source(SOURCE "${GGML_HRX_KERNEL_SOURCE}" WAVEFRONT_SIZE 64)
 endforeach()
 
+ggml_hrx_add_kernel_source(
+    SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/kernels/flash_attn_ext_f32_f16_prefill_direct.hip.cpp"
+    WAVEFRONT_SIZE 32
+    DEPS
+        "${CMAKE_CURRENT_SOURCE_DIR}/kernels/flash_attn_ext_f32_f16_prefill_direct_generic.inc"
+        "${CMAKE_CURRENT_SOURCE_DIR}/kernels/flash_attn_ext_f32_f16_prefill_direct_gfx11.inc"
+)
 ggml_hrx_add_kernel_source(
     SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q5_k_q8_1.hip.cpp"
     WAVEFRONT_SIZE 32

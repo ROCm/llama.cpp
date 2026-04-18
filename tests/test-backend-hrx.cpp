@@ -1615,6 +1615,146 @@ private:
     std::string old_value;
 };
 
+static void expect_flash_attn_ext_prefill_samples(
+        const std::vector<float> & actual,
+        const std::vector<float> & q,
+        const std::vector<float> & k,
+        const std::vector<float> & v,
+        const std::vector<float> & mask,
+        float scale,
+        const char * label) {
+    static constexpr int64_t D = 256;
+    static constexpr int64_t N = 512;
+    static constexpr int64_t H = 16;
+    static constexpr int64_t H_KV = 2;
+    static constexpr int64_t KV = 512;
+    const std::array<int64_t, 5> sample_tokens = { 0, 1, 17, 255, 511 };
+    const std::array<int64_t, 3> sample_heads = { 0, 7, 15 };
+    const std::array<int64_t, 4> sample_cols = { 0, 31, 128, 255 };
+    std::vector<float> logits(static_cast<size_t>(KV));
+    std::vector<float> expected(static_cast<size_t>(D));
+
+    for (const int64_t token : sample_tokens) {
+        for (const int64_t head : sample_heads) {
+            const int64_t kv_head = head / (H / H_KV);
+            float max_score = -INFINITY;
+            for (int64_t t = 0; t < KV; ++t) {
+                float score = 0.0f;
+                for (int64_t col = 0; col < D; ++col) {
+                    score +=
+                        q[index_4d(col, token, head, 0, D, N, H)] *
+                        k[index_4d(col, t, kv_head, 0, D, KV, H_KV)];
+                }
+                score = score * scale + mask[index_4d(t, token, 0, 0, KV, N, 1)];
+                logits[static_cast<size_t>(t)] = score;
+                max_score = std::max(max_score, score);
+            }
+
+            float denom = 0.0f;
+            for (float & logit : logits) {
+                logit = std::exp(logit - max_score);
+                denom += logit;
+            }
+
+            for (int64_t col = 0; col < D; ++col) {
+                float value = 0.0f;
+                for (int64_t t = 0; t < KV; ++t) {
+                    value += logits[static_cast<size_t>(t)] *
+                        v[index_4d(col, t, kv_head, 0, D, KV, H_KV)];
+                }
+                expected[static_cast<size_t>(col)] = value / denom;
+            }
+
+            for (const int64_t col : sample_cols) {
+                const size_t out_idx = index_4d(col, head, token, 0, D, H, N);
+                const float got = actual[out_idx];
+                const float want = expected[static_cast<size_t>(col)];
+                if (std::fabs(got - want) > 2.0e-2f) {
+                    std::fprintf(stderr,
+                        "%s[col=%" PRId64 ",head=%" PRId64 ",token=%" PRId64 "]: got %.9g expected %.9g\n",
+                        label, col, head, token, got, want);
+                    std::abort();
+                }
+            }
+        }
+    }
+}
+
+static void run_flash_attn_ext_prefill_f16_case(
+        ggml_backend_t backend,
+        ggml_backend_dev_t dev,
+        bool disable_direct,
+        bool disable_wmma,
+        const char * label) {
+    scoped_env_var disable_decode("GGML_HRX_DISABLE_FLASH_ATTN_EXT_DECODE", "1");
+    scoped_env_var disable_direct_var(
+        "GGML_HRX_DISABLE_F16_PREFILL_FA_DIRECT", disable_direct ? "1" : "0");
+    scoped_env_var disable_wmma_var("GGML_HRX_DISABLE_F16_PREFILL_FA_WMMA", disable_wmma ? "1" : "0");
+    scoped_env_var disable_tile("GGML_HRX_DISABLE_F16_PREFILL_FA_TILE", "0");
+
+    static constexpr int64_t D = 256;
+    static constexpr int64_t N = 512;
+    static constexpr int64_t H = 16;
+    static constexpr int64_t H_KV = 2;
+    static constexpr int64_t KV = 512;
+    static constexpr int64_t S = 1;
+    const float scale = 1.0f / std::sqrt(static_cast<float>(D));
+
+    ggml_context_ptr ctx = make_context();
+    ggml_tensor * q = ggml_new_tensor_4d(ctx.get(), GGML_TYPE_F32, D, N, H, S);
+    ggml_tensor * k = ggml_new_tensor_4d(ctx.get(), GGML_TYPE_F16, D, KV, H_KV, S);
+    ggml_tensor * v = ggml_new_tensor_4d(ctx.get(), GGML_TYPE_F16, D, KV, H_KV, S);
+    ggml_tensor * mask = ggml_new_tensor_4d(ctx.get(), GGML_TYPE_F16, KV, N, 1, S);
+    ggml_tensor * out = ggml_flash_attn_ext(ctx.get(), q, k, v, mask, scale, 0.0f, 0.0f);
+    GGML_ASSERT(ggml_backend_dev_supports_op(dev, out));
+
+    ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 16, false);
+    ggml_build_forward_expand(graph, out);
+
+    ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
+    GGML_ASSERT(buffer != nullptr);
+
+    std::vector<float> q_data(static_cast<size_t>(D * N * H * S));
+    std::vector<float> k_data(static_cast<size_t>(D * KV * H_KV * S));
+    std::vector<float> v_data(static_cast<size_t>(D * KV * H_KV * S));
+    for (size_t i = 0; i < q_data.size(); ++i) {
+        q_data[i] = static_cast<float>(static_cast<int>((i * 7 + 3) % 41) - 20) / 61.0f;
+    }
+    for (size_t i = 0; i < k_data.size(); ++i) {
+        k_data[i] = static_cast<float>(static_cast<int>((i * 11 + 5) % 37) - 18) / 67.0f;
+    }
+    for (size_t i = 0; i < v_data.size(); ++i) {
+        v_data[i] = static_cast<float>(static_cast<int>((i * 13 + 9) % 43) - 21) / 59.0f;
+    }
+
+    std::vector<float> k_reference;
+    std::vector<float> v_reference;
+    std::vector<uint8_t> k_storage;
+    std::vector<uint8_t> v_storage;
+    prepare_rows(GGML_TYPE_F16, D, KV * H_KV * S, k_data, k_reference, k_storage);
+    prepare_rows(GGML_TYPE_F16, D, KV * H_KV * S, v_data, v_reference, v_storage);
+
+    std::vector<float> mask_reference(static_cast<size_t>(KV * N * S));
+    std::vector<ggml_fp16_t> mask_storage(mask_reference.size());
+    for (int64_t token = 0; token < N; ++token) {
+        for (int64_t t = 0; t < KV; ++t) {
+            const float value = t > token ? -1000.0f : 0.03125f * static_cast<float>(token - t);
+            const size_t idx = index_4d(t, token, 0, 0, KV, N, 1);
+            mask_reference[idx] = ggml_fp16_to_fp32(ggml_fp32_to_fp16(value));
+            mask_storage[idx] = ggml_fp32_to_fp16(value);
+        }
+    }
+
+    ggml_backend_tensor_set(q, q_data.data(), 0, q_data.size() * sizeof(float));
+    ggml_backend_tensor_set(k, k_storage.data(), 0, k_storage.size());
+    ggml_backend_tensor_set(v, v_storage.data(), 0, v_storage.size());
+    ggml_backend_tensor_set(mask, mask_storage.data(), 0, mask_storage.size() * sizeof(ggml_fp16_t));
+
+    GGML_ASSERT(ggml_backend_graph_compute(backend, graph) == GGML_STATUS_SUCCESS);
+    expect_flash_attn_ext_prefill_samples(
+        tensor_to_float(out), q_data, k_reference, v_reference, mask_reference, scale, label);
+}
+
 static float ssm_conv_update_value(
         const std::vector<float> & conv_state,
         const std::vector<float> & input,
@@ -2361,6 +2501,12 @@ int main() {
             backend.get(), dev, GGML_TYPE_Q8_0, GGML_TYPE_Q8_0, false, false, "flash_attn_ext_q8_0");
         run_flash_attn_ext_decode_case(
             backend.get(), dev, GGML_TYPE_Q8_0, GGML_TYPE_Q4_0, false, false, "flash_attn_ext_q8_0_q4_0");
+        run_flash_attn_ext_prefill_f16_case(
+            backend.get(), dev, false, false, "flash_attn_ext_f16_prefill_direct");
+        run_flash_attn_ext_prefill_f16_case(
+            backend.get(), dev, true, false, "flash_attn_ext_f16_prefill_wmma16");
+        run_flash_attn_ext_prefill_f16_case(
+            backend.get(), dev, true, true, "flash_attn_ext_f16_prefill_tile8");
         run_soft_max_case(backend.get(), 1, false);
         run_soft_max_case(backend.get(), 257, false);
         run_soft_max_case(backend.get(), 257, true);
