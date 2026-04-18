@@ -4,6 +4,7 @@
 #include <ggml-hrx.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cinttypes>
 #include <cstddef>
@@ -1614,6 +1615,293 @@ private:
     std::string old_value;
 };
 
+static void run_add8_fusion_case(ggml_backend_t backend, int64_t ncols, int64_t nrows) {
+    ggml_context_ptr ctx = make_context();
+    static constexpr int ARITY = 8;
+    const int64_t base_cols = ncols + 3;
+    std::array<ggml_tensor *, ARITY> bases = {};
+    std::array<ggml_tensor *, ARITY> views = {};
+    for (int i = 0; i < ARITY; ++i) {
+        bases[i] = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, base_cols, nrows);
+        views[i] = ggml_view_2d(
+            ctx.get(), bases[i], ncols, nrows, bases[i]->nb[1], static_cast<size_t>(i % 3) * sizeof(float));
+    }
+
+    ggml_tensor * sum = ggml_add(ctx.get(), views[0], views[1]);
+    for (int i = 2; i < ARITY; ++i) {
+        sum = ggml_add(ctx.get(), sum, views[i]);
+    }
+
+    ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 32, false);
+    for (int i = 0; i < ARITY; ++i) {
+        ggml_build_forward_expand(graph, views[i]);
+    }
+    ggml_build_forward_expand(graph, sum);
+
+    ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
+    GGML_ASSERT(buffer != nullptr);
+
+    std::vector<std::vector<float>> base_data;
+    base_data.reserve(ARITY);
+    std::vector<float> expected(static_cast<size_t>(ncols * nrows), 0.0f);
+    for (int i = 0; i < ARITY; ++i) {
+        base_data.emplace_back(static_cast<size_t>(base_cols * nrows));
+        for (int64_t row = 0; row < nrows; ++row) {
+            for (int64_t col = 0; col < base_cols; ++col) {
+                base_data.back()[static_cast<size_t>(col + base_cols * row)] =
+                    static_cast<float>(((col + 7 * row + 11 * i) % 29) - 14) / 17.0f;
+            }
+            for (int64_t col = 0; col < ncols; ++col) {
+                expected[static_cast<size_t>(col + ncols * row)] +=
+                    base_data.back()[static_cast<size_t>(col + (i % 3) + base_cols * row)];
+            }
+        }
+        ggml_backend_tensor_set(bases[i], base_data.back().data(), 0, base_data.back().size() * sizeof(float));
+    }
+
+    scoped_env_var disable_add("GGML_HRX_DISABLE_ADD", "1");
+    GGML_ASSERT(ggml_backend_graph_compute(backend, graph) == GGML_STATUS_SUCCESS);
+    expect_near(tensor_to_float(sum), expected, 1.0e-6f, "add8_fusion");
+}
+
+static void run_mul_sum8_fusion_case(ggml_backend_t backend, int64_t rows, int64_t tokens) {
+    ggml_context_ptr ctx = make_context();
+    ggml_tensor * values = ggml_new_tensor_3d(ctx.get(), GGML_TYPE_F32, rows, 8, tokens);
+    ggml_tensor * scales = ggml_new_tensor_3d(ctx.get(), GGML_TYPE_F32, 1, 8, tokens);
+    ggml_tensor * product = ggml_mul(ctx.get(), values, scales);
+
+    std::array<ggml_tensor *, 8> slices = {};
+    for (int i = 0; i < 8; ++i) {
+        slices[i] = ggml_view_2d(
+            ctx.get(), product, rows, tokens, product->nb[2], static_cast<size_t>(i) * product->nb[1]);
+    }
+
+    ggml_tensor * sum = ggml_add(ctx.get(), slices[0], slices[1]);
+    for (int i = 2; i < 8; ++i) {
+        sum = ggml_add(ctx.get(), sum, slices[i]);
+    }
+
+    ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 32, false);
+    ggml_build_forward_expand(graph, product);
+    for (int i = 0; i < 8; ++i) {
+        ggml_build_forward_expand(graph, slices[i]);
+    }
+    ggml_build_forward_expand(graph, sum);
+
+    ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
+    GGML_ASSERT(buffer != nullptr);
+
+    std::vector<float> values_data(static_cast<size_t>(rows * 8 * tokens));
+    std::vector<float> scales_data(static_cast<size_t>(8 * tokens));
+    for (size_t i = 0; i < values_data.size(); ++i) {
+        values_data[i] = static_cast<float>(static_cast<int>((i * 5 + 3) % 37) - 18) / 19.0f;
+    }
+    for (size_t i = 0; i < scales_data.size(); ++i) {
+        scales_data[i] = static_cast<float>(static_cast<int>((i * 7 + 2) % 23) - 11) / 13.0f;
+    }
+
+    std::vector<float> expected(static_cast<size_t>(rows * tokens), 0.0f);
+    for (int64_t token = 0; token < tokens; ++token) {
+        for (int64_t row = 0; row < rows; ++row) {
+            float acc = 0.0f;
+            for (int64_t expert = 0; expert < 8; ++expert) {
+                const size_t value_idx = static_cast<size_t>(row + rows * (expert + 8 * token));
+                const size_t scale_idx = static_cast<size_t>(expert + 8 * token);
+                acc += values_data[value_idx] * scales_data[scale_idx];
+            }
+            expected[static_cast<size_t>(row + rows * token)] = acc;
+        }
+    }
+
+    ggml_backend_tensor_set(values, values_data.data(), 0, values_data.size() * sizeof(float));
+    ggml_backend_tensor_set(scales, scales_data.data(), 0, scales_data.size() * sizeof(float));
+
+    scoped_env_var disable_add("GGML_HRX_DISABLE_ADD", "1");
+    scoped_env_var disable_mul("GGML_HRX_DISABLE_MUL", "1");
+    GGML_ASSERT(ggml_backend_graph_compute(backend, graph) == GGML_STATUS_SUCCESS);
+    expect_near(tensor_to_float(sum), expected, 2.0e-6f, "mul_sum8_fusion");
+}
+
+static void set_mul_sum8_inputs(ggml_tensor * values, ggml_tensor * scales, int64_t rows, int64_t tokens) {
+    std::vector<float> values_data(static_cast<size_t>(rows * 8 * tokens));
+    std::vector<float> scales_data(static_cast<size_t>(8 * tokens));
+    for (size_t i = 0; i < values_data.size(); ++i) {
+        values_data[i] = static_cast<float>(static_cast<int>((i * 5 + 3) % 37) - 18) / 19.0f;
+    }
+    for (size_t i = 0; i < scales_data.size(); ++i) {
+        scales_data[i] = static_cast<float>(static_cast<int>((i * 7 + 2) % 23) - 11) / 13.0f;
+    }
+    ggml_backend_tensor_set(values, values_data.data(), 0, values_data.size() * sizeof(float));
+    ggml_backend_tensor_set(scales, scales_data.data(), 0, scales_data.size() * sizeof(float));
+}
+
+static void expect_graph_failure(ggml_backend_t backend, ggml_cgraph * graph, const char * label) {
+    const ggml_status status = ggml_backend_graph_compute(backend, graph);
+    if (status == GGML_STATUS_SUCCESS) {
+        std::fprintf(stderr, "%s unexpectedly succeeded\n", label);
+        std::abort();
+    }
+}
+
+static void run_mul_sum8_negative_intervening_op_case(ggml_backend_t backend) {
+    static constexpr int64_t rows = 17;
+    static constexpr int64_t tokens = 2;
+    ggml_context_ptr ctx = make_context();
+    ggml_tensor * values = ggml_new_tensor_3d(ctx.get(), GGML_TYPE_F32, rows, 8, tokens);
+    ggml_tensor * scales = ggml_new_tensor_3d(ctx.get(), GGML_TYPE_F32, 1, 8, tokens);
+    ggml_tensor * product = ggml_mul(ctx.get(), values, scales);
+    ggml_tensor * intervening_add = ggml_add(ctx.get(), scales, scales);
+
+    std::array<ggml_tensor *, 8> slices = {};
+    for (int i = 0; i < 8; ++i) {
+        slices[i] = ggml_view_2d(
+            ctx.get(), product, rows, tokens, product->nb[2], static_cast<size_t>(i) * product->nb[1]);
+    }
+    ggml_tensor * sum = ggml_add(ctx.get(), slices[0], slices[1]);
+    for (int i = 2; i < 8; ++i) {
+        sum = ggml_add(ctx.get(), sum, slices[i]);
+    }
+
+    ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 40, false);
+    ggml_build_forward_expand(graph, product);
+    ggml_build_forward_expand(graph, intervening_add);
+    for (int i = 0; i < 8; ++i) {
+        ggml_build_forward_expand(graph, slices[i]);
+    }
+    ggml_build_forward_expand(graph, sum);
+
+    ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
+    GGML_ASSERT(buffer != nullptr);
+    set_mul_sum8_inputs(values, scales, rows, tokens);
+
+    scoped_env_var disable_add("GGML_HRX_DISABLE_ADD", "1");
+    expect_graph_failure(backend, graph, "mul_sum8_intervening_op");
+}
+
+static void run_mul_sum8_negative_extra_product_consumer_case(ggml_backend_t backend) {
+    static constexpr int64_t rows = 17;
+    static constexpr int64_t tokens = 2;
+    ggml_context_ptr ctx = make_context();
+    ggml_tensor * values = ggml_new_tensor_3d(ctx.get(), GGML_TYPE_F32, rows, 8, tokens);
+    ggml_tensor * scales = ggml_new_tensor_3d(ctx.get(), GGML_TYPE_F32, 1, 8, tokens);
+    ggml_tensor * product = ggml_mul(ctx.get(), values, scales);
+
+    std::array<ggml_tensor *, 8> slices = {};
+    for (int i = 0; i < 8; ++i) {
+        slices[i] = ggml_view_2d(
+            ctx.get(), product, rows, tokens, product->nb[2], static_cast<size_t>(i) * product->nb[1]);
+    }
+    ggml_tensor * sum = ggml_add(ctx.get(), slices[0], slices[1]);
+    for (int i = 2; i < 8; ++i) {
+        sum = ggml_add(ctx.get(), sum, slices[i]);
+    }
+    ggml_tensor * extra_consumer = ggml_scale_bias(ctx.get(), product, 1.0f, 0.0f);
+
+    ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 40, false);
+    ggml_build_forward_expand(graph, product);
+    for (int i = 0; i < 8; ++i) {
+        ggml_build_forward_expand(graph, slices[i]);
+    }
+    ggml_build_forward_expand(graph, sum);
+    ggml_build_forward_expand(graph, extra_consumer);
+
+    ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
+    GGML_ASSERT(buffer != nullptr);
+    set_mul_sum8_inputs(values, scales, rows, tokens);
+
+    scoped_env_var disable_mul("GGML_HRX_DISABLE_MUL", "1");
+    expect_graph_failure(backend, graph, "mul_sum8_extra_product_consumer");
+}
+
+static void run_mul_sum8_negative_duplicate_slice_case(ggml_backend_t backend) {
+    static constexpr int64_t rows = 17;
+    static constexpr int64_t tokens = 2;
+    ggml_context_ptr ctx = make_context();
+    ggml_tensor * values = ggml_new_tensor_3d(ctx.get(), GGML_TYPE_F32, rows, 8, tokens);
+    ggml_tensor * scales = ggml_new_tensor_3d(ctx.get(), GGML_TYPE_F32, 1, 8, tokens);
+    ggml_tensor * product = ggml_mul(ctx.get(), values, scales);
+
+    std::array<ggml_tensor *, 8> slices = {};
+    slices[0] = ggml_view_2d(ctx.get(), product, rows, tokens, product->nb[2], 0);
+    slices[1] = ggml_view_2d(ctx.get(), product, rows, tokens, product->nb[2], 0);
+    for (int i = 2; i < 8; ++i) {
+        slices[i] = ggml_view_2d(
+            ctx.get(), product, rows, tokens, product->nb[2], static_cast<size_t>(i) * product->nb[1]);
+    }
+
+    ggml_tensor * sum = ggml_add(ctx.get(), slices[0], slices[1]);
+    for (int i = 2; i < 8; ++i) {
+        sum = ggml_add(ctx.get(), sum, slices[i]);
+    }
+
+    ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 40, false);
+    ggml_build_forward_expand(graph, product);
+    for (int i = 0; i < 8; ++i) {
+        ggml_build_forward_expand(graph, slices[i]);
+    }
+    ggml_build_forward_expand(graph, sum);
+
+    ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
+    GGML_ASSERT(buffer != nullptr);
+    set_mul_sum8_inputs(values, scales, rows, tokens);
+
+    scoped_env_var disable_mul("GGML_HRX_DISABLE_MUL", "1");
+    expect_graph_failure(backend, graph, "mul_sum8_duplicate_slice");
+}
+
+static void run_mul_add_add_fusion_case(ggml_backend_t backend, int64_t ncols, int64_t nrows) {
+    ggml_context_ptr ctx = make_context();
+    ggml_tensor * lhs = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, ncols, nrows);
+    ggml_tensor * scale = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, 1, nrows);
+    ggml_tensor * bias0 = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, ncols, 1);
+    ggml_tensor * bias1 = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, ncols, nrows);
+    ggml_tensor * product = ggml_mul(ctx.get(), lhs, scale);
+    ggml_tensor * first_add = ggml_add(ctx.get(), product, bias0);
+    ggml_tensor * second_add = ggml_add(ctx.get(), first_add, bias1);
+
+    ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 16, false);
+    ggml_build_forward_expand(graph, second_add);
+
+    ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
+    GGML_ASSERT(buffer != nullptr);
+
+    std::vector<float> lhs_data(static_cast<size_t>(ncols * nrows));
+    std::vector<float> scale_data(static_cast<size_t>(nrows));
+    std::vector<float> bias0_data(static_cast<size_t>(ncols));
+    std::vector<float> bias1_data(static_cast<size_t>(ncols * nrows));
+    for (size_t i = 0; i < lhs_data.size(); ++i) {
+        lhs_data[i] = static_cast<float>(static_cast<int>((i * 13 + 1) % 41) - 20) / 23.0f;
+    }
+    for (size_t i = 0; i < scale_data.size(); ++i) {
+        scale_data[i] = static_cast<float>(static_cast<int>((i * 3 + 5) % 17) - 8) / 11.0f;
+    }
+    for (size_t i = 0; i < bias0_data.size(); ++i) {
+        bias0_data[i] = static_cast<float>(static_cast<int>((i * 7 + 3) % 19) - 9) / 29.0f;
+    }
+    for (size_t i = 0; i < bias1_data.size(); ++i) {
+        bias1_data[i] = static_cast<float>(static_cast<int>((i * 11 + 4) % 31) - 15) / 31.0f;
+    }
+
+    std::vector<float> expected(lhs_data.size());
+    for (int64_t row = 0; row < nrows; ++row) {
+        for (int64_t col = 0; col < ncols; ++col) {
+            const size_t idx = static_cast<size_t>(col + ncols * row);
+            expected[idx] = lhs_data[idx] * scale_data[static_cast<size_t>(row)] +
+                bias0_data[static_cast<size_t>(col)] + bias1_data[idx];
+        }
+    }
+
+    ggml_backend_tensor_set(lhs, lhs_data.data(), 0, lhs_data.size() * sizeof(float));
+    ggml_backend_tensor_set(scale, scale_data.data(), 0, scale_data.size() * sizeof(float));
+    ggml_backend_tensor_set(bias0, bias0_data.data(), 0, bias0_data.size() * sizeof(float));
+    ggml_backend_tensor_set(bias1, bias1_data.data(), 0, bias1_data.size() * sizeof(float));
+
+    scoped_env_var disable_add("GGML_HRX_DISABLE_ADD", "1");
+    scoped_env_var disable_mul("GGML_HRX_DISABLE_MUL", "1");
+    GGML_ASSERT(ggml_backend_graph_compute(backend, graph) == GGML_STATUS_SUCCESS);
+    expect_near(tensor_to_float(second_add), expected, 1.0e-6f, "mul_add_add_fusion");
+}
+
 } // namespace
 
 int main() {
@@ -1782,6 +2070,14 @@ int main() {
         run_unary_case(backend.get(), GGML_UNARY_OP_SIGMOID, 257);
         run_unary_case(backend.get(), GGML_UNARY_OP_SOFTPLUS, 257);
         run_swiglu_case(backend.get(), 257);
+        run_add8_fusion_case(backend.get(), 1, 1);
+        run_add8_fusion_case(backend.get(), 257, 3);
+        run_mul_sum8_fusion_case(backend.get(), 257, 3);
+        run_mul_sum8_negative_intervening_op_case(backend.get());
+        run_mul_sum8_negative_extra_product_consumer_case(backend.get());
+        run_mul_sum8_negative_duplicate_slice_case(backend.get());
+        run_mul_add_add_fusion_case(backend.get(), 1, 1);
+        run_mul_add_add_fusion_case(backend.get(), 257, 3);
         run_mul_mat_vec_case(backend.get(), dev, GGML_TYPE_F32, 17, 3, 2, 2.0e-4f, "mul_mat_vec_f32");
         run_mul_mat_vec_case(backend.get(), dev, GGML_TYPE_F16, 257, 3, 2, 2.0e-4f, "mul_mat_vec_f16");
         run_mul_mat_vec_case(backend.get(), dev, GGML_TYPE_BF16, 257, 3, 2, 2.0e-3f, "mul_mat_vec_bf16");

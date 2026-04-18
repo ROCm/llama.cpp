@@ -97,6 +97,7 @@ function(ggml_hrx_add_kernel_source)
 endfunction()
 
 set(GGML_HRX_WAVE32_KERNEL_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/add8_f32.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/add_f32.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/add_f32_broadcast.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/argsort_f32.hip.cpp"
@@ -114,6 +115,7 @@ set(GGML_HRX_WAVE32_KERNEL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/gated_delta_net_f32.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/get_rows_f32.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/get_rows_q5_k.hip.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_add_add_f32_broadcast.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_f32.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_f32_broadcast.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_bf16.hip.cpp"
@@ -127,6 +129,7 @@ set(GGML_HRX_WAVE32_KERNEL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q5_k.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q6_k.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_mat_vec_q8_0.hip.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/mul_sum8_f32.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/quantize_q8_1.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/rms_norm.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/rope_f32.hip.cpp"
