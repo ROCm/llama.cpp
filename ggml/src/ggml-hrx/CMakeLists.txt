@@ -75,6 +75,8 @@ set(GGML_HRX_KERNEL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/set_rows_f32_q8_0.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/soft_max_f32.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/ssm_conv_f32.hip.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/topk_moe_f32_shared.hip.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/topk_moe_f32_wave32.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/unary_f32.hip.cpp")
 file(MAKE_DIRECTORY "${GGML_HRX_GENERATED_DIR}" "${GGML_HRX_HSACO_ROOT}")
 
@@ -91,6 +93,19 @@ foreach(GGML_HRX_AMDGPU_TARGET IN LISTS GGML_HRX_AMDGPU_TARGET_LIST)
         get_filename_component(GGML_HRX_KERNEL_SOURCE_NAME "${GGML_HRX_KERNEL_SOURCE}" NAME)
         string(REPLACE ".hip.cpp" ".hsaco" GGML_HRX_HSACO_NAME "${GGML_HRX_KERNEL_SOURCE_NAME}")
         set(GGML_HRX_HSACO_OUTPUT "${GGML_HRX_HSACO_DIR}/${GGML_HRX_HSACO_NAME}")
+        set(GGML_HRX_KERNEL_DEPS "${GGML_HRX_KERNEL_SOURCE}")
+        if (GGML_HRX_KERNEL_SOURCE_NAME MATCHES "^topk_moe_f32_")
+            list(APPEND GGML_HRX_KERNEL_DEPS
+                "${CMAKE_CURRENT_SOURCE_DIR}/kernels/topk_moe_f32_common.hip.inc")
+        endif()
+        if (GGML_HRX_KERNEL_SOURCE_NAME MATCHES "^topk_moe_f32_wave")
+            list(APPEND GGML_HRX_KERNEL_DEPS
+                "${CMAKE_CURRENT_SOURCE_DIR}/kernels/topk_moe_f32_wave.inc")
+        endif()
+        set(GGML_HRX_KERNEL_COMPILE_FLAGS)
+        if (GGML_HRX_KERNEL_SOURCE_NAME STREQUAL "topk_moe_f32_wave32.hip.cpp")
+            list(APPEND GGML_HRX_KERNEL_COMPILE_FLAGS -mno-wavefrontsize64)
+        endif()
         add_custom_command(
             OUTPUT "${GGML_HRX_HSACO_OUTPUT}"
             COMMAND "${GGML_HRX_CLANGXX}"
@@ -99,9 +114,10 @@ foreach(GGML_HRX_AMDGPU_TARGET IN LISTS GGML_HRX_AMDGPU_TARGET_LIST)
                 --no-gpu-bundle-output
                 "--offload-arch=${GGML_HRX_AMDGPU_TARGET}"
                 -O2
+                ${GGML_HRX_KERNEL_COMPILE_FLAGS}
                 -c "${GGML_HRX_KERNEL_SOURCE}"
                 -o "${GGML_HRX_HSACO_OUTPUT}"
-            DEPENDS "${GGML_HRX_KERNEL_SOURCE}"
+            DEPENDS ${GGML_HRX_KERNEL_DEPS}
             VERBATIM
         )
         list(APPEND GGML_HRX_HSACO_OUTPUTS "${GGML_HRX_HSACO_OUTPUT}")

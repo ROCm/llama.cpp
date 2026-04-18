@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -1282,6 +1283,113 @@ static void run_argsort_case(ggml_backend_t backend, int64_t ncols, int64_t nrow
     }
 }
 
+static void run_topk_moe_case(
+        ggml_backend_t backend,
+        int64_t n_experts,
+        int64_t n_tokens,
+        int64_t n_expert_used,
+        bool with_norm,
+        const char * label) {
+    ggml_context_ptr ctx = make_context();
+    int64_t ne[4] = { n_experts, n_tokens, 1, 1 };
+    ggml_tensor * logits = ggml_new_tensor(ctx.get(), GGML_TYPE_F32, 4, ne);
+    ggml_tensor * probs = ggml_soft_max(ctx.get(), logits);
+    ggml_tensor * selected_experts = ggml_argsort_top_k(ctx.get(), probs, n_expert_used);
+    ggml_tensor * weights = ggml_get_rows(
+        ctx.get(), ggml_reshape_3d(ctx.get(), probs, 1, n_experts, n_tokens), selected_experts);
+    if (with_norm) {
+        weights = ggml_reshape_2d(ctx.get(), weights, n_expert_used, n_tokens);
+        ggml_tensor * weights_sum = ggml_sum_rows(ctx.get(), weights);
+        weights_sum = ggml_clamp(
+            ctx.get(), weights_sum, 6.103515625e-5f, std::numeric_limits<float>::infinity());
+        weights = ggml_div(ctx.get(), weights, weights_sum);
+        weights = ggml_reshape_3d(ctx.get(), weights, 1, n_expert_used, n_tokens);
+    }
+
+    ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 32, false);
+    ggml_build_forward_expand(graph, weights);
+
+    ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
+    GGML_ASSERT(buffer != nullptr);
+
+    std::vector<float> logits_data(static_cast<size_t>(n_experts * n_tokens));
+    for (int64_t token = 0; token < n_tokens; ++token) {
+        for (int64_t expert = 0; expert < n_experts; ++expert) {
+            const int64_t raw = (expert * 37 + token * 19 + (expert / 5) * 3) % 29;
+            float value = static_cast<float>(raw - 14) * 0.125f;
+            if (token == 0 && expert < std::min<int64_t>(n_experts, 4)) {
+                value = 1.25f;
+            }
+            logits_data[static_cast<size_t>(token * n_experts + expert)] = value;
+        }
+    }
+    ggml_backend_tensor_set(logits, logits_data.data(), 0, logits_data.size() * sizeof(float));
+    GGML_ASSERT(ggml_backend_graph_compute(backend, graph) == GGML_STATUS_SUCCESS);
+
+    std::vector<int32_t> expected_ids(static_cast<size_t>(n_expert_used * n_tokens));
+    std::vector<float> expected_weights(static_cast<size_t>(n_expert_used * n_tokens));
+    for (int64_t token = 0; token < n_tokens; ++token) {
+        const float * row = logits_data.data() + token * n_experts;
+        float max_value = row[0];
+        for (int64_t expert = 1; expert < n_experts; ++expert) {
+            max_value = std::max(max_value, row[expert]);
+        }
+
+        std::vector<float> probabilities(static_cast<size_t>(n_experts));
+        float sum = 0.0f;
+        for (int64_t expert = 0; expert < n_experts; ++expert) {
+            probabilities[static_cast<size_t>(expert)] = std::exp(row[expert] - max_value);
+            sum += probabilities[static_cast<size_t>(expert)];
+        }
+        for (float & value : probabilities) {
+            value /= sum;
+        }
+
+        std::vector<int32_t> order(static_cast<size_t>(n_experts));
+        for (int64_t expert = 0; expert < n_experts; ++expert) {
+            order[static_cast<size_t>(expert)] = static_cast<int32_t>(expert);
+        }
+        std::sort(order.begin(), order.end(), [&](int32_t lhs, int32_t rhs) {
+            const float lhs_value = probabilities[static_cast<size_t>(lhs)];
+            const float rhs_value = probabilities[static_cast<size_t>(rhs)];
+            if (lhs_value != rhs_value) {
+                return lhs_value > rhs_value;
+            }
+            return lhs < rhs;
+        });
+
+        float selected_sum = 0.0f;
+        for (int64_t k = 0; k < n_expert_used; ++k) {
+            selected_sum += probabilities[static_cast<size_t>(order[static_cast<size_t>(k)])];
+        }
+        const float denom = with_norm ? std::max(selected_sum, 6.103515625e-5f) : 1.0f;
+        for (int64_t k = 0; k < n_expert_used; ++k) {
+            const int32_t expert = order[static_cast<size_t>(k)];
+            const size_t out_idx = static_cast<size_t>(token * n_expert_used + k);
+            expected_ids[out_idx] = expert;
+            expected_weights[out_idx] = probabilities[static_cast<size_t>(expert)] / denom;
+        }
+    }
+
+    std::vector<int32_t> actual_ids(static_cast<size_t>(n_expert_used * n_tokens));
+    for (int64_t token = 0; token < n_tokens; ++token) {
+        ggml_backend_tensor_get(
+            selected_experts,
+            actual_ids.data() + token * n_expert_used,
+            static_cast<size_t>(token) * selected_experts->nb[1],
+            static_cast<size_t>(n_expert_used) * sizeof(int32_t));
+    }
+    GGML_ASSERT(actual_ids.size() == expected_ids.size());
+    for (size_t i = 0; i < actual_ids.size(); ++i) {
+        if (actual_ids[i] != expected_ids[i]) {
+            std::fprintf(stderr, "%s ids[%zu]: got %" PRId32 " expected %" PRId32 "\n",
+                label, i, actual_ids[i], expected_ids[i]);
+            std::abort();
+        }
+    }
+    expect_near(tensor_to_float(weights), expected_weights, 2.0e-5f, label);
+}
+
 static void run_rope_imrope_case(ggml_backend_t backend, int64_t ne0, int64_t ne1, int64_t ne2) {
     ggml_context_ptr ctx = make_context();
     ggml_tensor * src = ggml_new_tensor_3d(ctx.get(), GGML_TYPE_F32, ne0, ne1, ne2);
@@ -1772,6 +1880,23 @@ int main() {
         run_soft_max_case(backend.get(), 1, false);
         run_soft_max_case(backend.get(), 257, false);
         run_soft_max_case(backend.get(), 257, true);
+        {
+            scoped_env_var enable_prompt_topk("GGML_HRX_ENABLE_PROMPT_TOPK_MOE", "1");
+            scoped_env_var topk_variant("GGML_HRX_TOPK_MOE_VARIANT", "baseline");
+            scoped_env_var disable_argsort("GGML_HRX_DISABLE_ARGSORT", "1");
+            run_topk_moe_case(backend.get(), 16, 2, 4, false, "topk_moe_baseline");
+        }
+        {
+            scoped_env_var enable_prompt_topk("GGML_HRX_ENABLE_PROMPT_TOPK_MOE", "1");
+            scoped_env_var topk_variant("GGML_HRX_TOPK_MOE_VARIANT", "shared4");
+            scoped_env_var disable_argsort("GGML_HRX_DISABLE_ARGSORT", "1");
+            run_topk_moe_case(backend.get(), 32, 5, 8, true, "topk_moe_shared4_norm");
+        }
+        {
+            scoped_env_var topk_variant("GGML_HRX_TOPK_MOE_VARIANT", "wave32");
+            scoped_env_var disable_argsort("GGML_HRX_DISABLE_ARGSORT", "1");
+            run_topk_moe_case(backend.get(), 256, 1, 32, true, "topk_moe_wave32_norm");
+        }
         run_rope_imrope_case(backend.get(), 12, 2, 3);
         run_rope_imrope_case(backend.get(), 128, 4, 2);
         run_gated_delta_net_case(backend.get(), false);

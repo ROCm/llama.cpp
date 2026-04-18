@@ -44,6 +44,13 @@ enum class ggml_backend_hrx_provider_kind {
     hsaco,
 };
 
+enum class ggml_backend_hrx_topk_moe_variant {
+    auto_select,
+    baseline,
+    shared4,
+    wave32,
+};
+
 struct ggml_backend_hrx_op_provider {
     ggml_backend_hrx_provider_kind kind = ggml_backend_hrx_provider_kind::none;
     hrx_executable_t executable = nullptr;
@@ -335,6 +342,23 @@ struct ggml_backend_hrx_argsort_f32_constants {
 
 static_assert(sizeof(ggml_backend_hrx_argsort_f32_constants) == 24);
 
+struct ggml_backend_hrx_topk_moe_f32_constants {
+    int64_t n_experts;
+    int64_t n_rows;
+    int64_t n_expert_used;
+    int64_t logits_nb1;
+    int64_t weights_nb1;
+    int64_t weights_nb_k;
+    int64_t ids_nb1;
+    int64_t ids_nb_k;
+    float scale;
+    float clamp_min;
+    float clamp_max;
+    int32_t with_norm;
+};
+
+static_assert(sizeof(ggml_backend_hrx_topk_moe_f32_constants) == 80);
+
 struct ggml_backend_hrx_rope_f32_constants {
     int64_t ne00;
     int64_t ne01;
@@ -476,6 +500,9 @@ struct ggml_backend_hrx_device_context {
     ggml_backend_hrx_op_provider soft_max_f32_provider;
     ggml_backend_hrx_op_provider soft_max_f32_mask_provider;
     ggml_backend_hrx_op_provider argsort_f32_provider;
+    ggml_backend_hrx_op_provider topk_moe_f32_provider;
+    ggml_backend_hrx_op_provider topk_moe_f32_shared4_provider;
+    ggml_backend_hrx_op_provider topk_moe_f32_wave32_provider;
     ggml_backend_hrx_op_provider rope_f32_provider;
     ggml_backend_hrx_op_provider ssm_conv_provider;
     ggml_backend_hrx_op_provider gated_delta_net_provider;
@@ -540,6 +567,9 @@ static void ggml_backend_hrx_reset_providers(ggml_backend_hrx_device_context * d
     device_context->soft_max_f32_provider.reset();
     device_context->soft_max_f32_mask_provider.reset();
     device_context->argsort_f32_provider.reset();
+    device_context->topk_moe_f32_provider.reset();
+    device_context->topk_moe_f32_shared4_provider.reset();
+    device_context->topk_moe_f32_wave32_provider.reset();
     device_context->rope_f32_provider.reset();
     device_context->ssm_conv_provider.reset();
     device_context->gated_delta_net_provider.reset();
@@ -643,6 +673,24 @@ static uint64_t ggml_backend_hrx_u64_from_env(const char * name, uint64_t defaul
 static bool ggml_backend_hrx_env_enabled(const char * name) {
     const char * value = std::getenv(name);
     return value && value[0] != '\0' && std::strcmp(value, "0") != 0;
+}
+
+static ggml_backend_hrx_topk_moe_variant ggml_backend_hrx_topk_moe_variant_from_env() {
+    const char * value = std::getenv("GGML_HRX_TOPK_MOE_VARIANT");
+    if (!value || value[0] == '\0' || std::strcmp(value, "auto") == 0) {
+        return ggml_backend_hrx_topk_moe_variant::auto_select;
+    }
+    if (std::strcmp(value, "baseline") == 0 || std::strcmp(value, "shared1") == 0) {
+        return ggml_backend_hrx_topk_moe_variant::baseline;
+    }
+    if (std::strcmp(value, "shared4") == 0 || std::strcmp(value, "shared") == 0) {
+        return ggml_backend_hrx_topk_moe_variant::shared4;
+    }
+    if (std::strcmp(value, "wave32") == 0) {
+        return ggml_backend_hrx_topk_moe_variant::wave32;
+    }
+    GGML_LOG_WARN("%s: unknown GGML_HRX_TOPK_MOE_VARIANT=%s, using auto\n", __func__, value);
+    return ggml_backend_hrx_topk_moe_variant::auto_select;
 }
 
 static size_t ggml_backend_hrx_align_up(size_t value, size_t alignment) {
@@ -1603,6 +1651,16 @@ static bool ggml_backend_hrx_load_soft_max_f32_mask_provider(ggml_backend_hrx_de
 
 static bool ggml_backend_hrx_load_argsort_f32_provider(ggml_backend_hrx_device_context * device_context) {
     return ggml_backend_hrx_load_catalog_provider(device_context, "hrx_argsort_f32_i32", &device_context->argsort_f32_provider);
+}
+
+static bool ggml_backend_hrx_load_topk_moe_f32_providers(ggml_backend_hrx_device_context * device_context) {
+    bool ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_topk_moe_f32", &device_context->topk_moe_f32_provider);
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_topk_moe_f32_shared4", &device_context->topk_moe_f32_shared4_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_topk_moe_f32_wave32", &device_context->topk_moe_f32_wave32_provider) || ok;
+    return ok;
 }
 
 static bool ggml_backend_hrx_load_rope_f32_provider(ggml_backend_hrx_device_context * device_context) {
@@ -2669,7 +2727,8 @@ static bool ggml_backend_hrx_supports_argsort_f32(
         const ggml_tensor * op) {
     const ggml_tensor * src0 = op->src[0];
     const int64_t ncols = src0 ? src0->ne[0] : 0;
-    return device_context->argsort_f32_provider.kind == ggml_backend_hrx_provider_kind::hsaco &&
+    return !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_ARGSORT") &&
+           device_context->argsort_f32_provider.kind == ggml_backend_hrx_provider_kind::hsaco &&
            src0 &&
            src0->type == GGML_TYPE_F32 &&
            op->type == GGML_TYPE_I32 &&
@@ -2678,6 +2737,114 @@ static bool ggml_backend_hrx_supports_argsort_f32(
            ggml_are_same_shape(src0, op) &&
            ggml_is_contiguous(src0) &&
            ggml_is_contiguous(op);
+}
+
+static bool ggml_backend_hrx_supports_topk_moe_output_layout(
+        const ggml_tensor * tensor,
+        int64_t n_expert_used) {
+    return tensor &&
+           (tensor->ne[0] == n_expert_used ||
+            (tensor->ne[0] == 1 && tensor->ne[1] == n_expert_used));
+}
+
+static int64_t ggml_backend_hrx_topk_moe_row_stride(
+        const ggml_tensor * tensor,
+        int64_t n_expert_used) {
+    if (tensor->ne[0] == n_expert_used) {
+        return static_cast<int64_t>(tensor->nb[1]);
+    }
+    return static_cast<int64_t>(tensor->nb[2]);
+}
+
+static int64_t ggml_backend_hrx_topk_moe_k_stride(
+        const ggml_tensor * tensor,
+        int64_t n_expert_used) {
+    if (tensor->ne[0] == n_expert_used) {
+        return static_cast<int64_t>(tensor->nb[0]);
+    }
+    return static_cast<int64_t>(tensor->nb[1]);
+}
+
+static bool ggml_backend_hrx_supports_topk_moe_f32(
+        const ggml_backend_hrx_device_context * device_context,
+        const ggml_tensor * soft_max,
+        const ggml_tensor * weights,
+        const ggml_tensor * ids) {
+    const int64_t n_logit_rows =
+        (soft_max && soft_max->src[0]) ? ggml_nrows(soft_max->src[0]) : 0;
+    const int64_t n_expert_used =
+        (n_logit_rows > 0 && weights) ? ggml_nelements(weights) / n_logit_rows : 0;
+    if (ggml_backend_hrx_approximate_kernels_disabled() ||
+        ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_TOPK_MOE") ||
+        device_context->topk_moe_f32_provider.kind != ggml_backend_hrx_provider_kind::hsaco ||
+        !soft_max || !weights || !ids ||
+        soft_max->op != GGML_OP_SOFT_MAX ||
+        !soft_max->src[0] ||
+        soft_max->src[0]->type != GGML_TYPE_F32 ||
+        soft_max->type != GGML_TYPE_F32 ||
+        weights->type != GGML_TYPE_F32 ||
+        ids->type != GGML_TYPE_I32 ||
+        soft_max->src[1] || soft_max->src[2] ||
+        soft_max->src[0]->ne[0] <= 0 ||
+        soft_max->src[0]->ne[0] > 256 ||
+        (soft_max->src[0]->ne[0] & (soft_max->src[0]->ne[0] - 1)) != 0 ||
+        n_logit_rows <= 0 ||
+        (n_logit_rows != 1 && !ggml_backend_hrx_env_enabled("GGML_HRX_ENABLE_PROMPT_TOPK_MOE")) ||
+        ggml_nelements(weights) % n_logit_rows != 0 ||
+        ggml_nelements(weights) != ggml_nelements(ids) ||
+        n_expert_used <= 0 ||
+        n_expert_used > 32 ||
+        !ggml_backend_hrx_supports_topk_moe_output_layout(weights, n_expert_used) ||
+        !ggml_backend_hrx_supports_topk_moe_output_layout(ids, n_expert_used) ||
+        !ggml_is_contiguous(soft_max->src[0]) ||
+        weights->nb[0] != sizeof(float) ||
+        ids->nb[0] != sizeof(int32_t)) {
+        return false;
+    }
+
+    float scale = 1.0f;
+    float max_bias = 0.0f;
+    std::memcpy(&scale, reinterpret_cast<const int32_t *>(soft_max->op_params), sizeof(float));
+    std::memcpy(&max_bias, reinterpret_cast<const int32_t *>(soft_max->op_params) + 1, sizeof(float));
+    return scale == 1.0f && max_bias == 0.0f;
+}
+
+static const ggml_backend_hrx_op_provider & ggml_backend_hrx_select_topk_moe_f32_provider(
+        const ggml_backend_hrx_device_context * device_context,
+        int64_t n_rows) {
+    const auto provider_available = [](const ggml_backend_hrx_op_provider & provider) {
+        return provider.kind == ggml_backend_hrx_provider_kind::hsaco;
+    };
+
+    const auto & baseline = device_context->topk_moe_f32_provider;
+    if (ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_TOPK_SUBGROUP")) {
+        return baseline;
+    }
+
+    switch (ggml_backend_hrx_topk_moe_variant_from_env()) {
+        case ggml_backend_hrx_topk_moe_variant::baseline:
+            return baseline;
+        case ggml_backend_hrx_topk_moe_variant::shared4:
+            if (provider_available(device_context->topk_moe_f32_shared4_provider)) {
+                return device_context->topk_moe_f32_shared4_provider;
+            }
+            break;
+        case ggml_backend_hrx_topk_moe_variant::wave32:
+            if (provider_available(device_context->topk_moe_f32_wave32_provider)) {
+                return device_context->topk_moe_f32_wave32_provider;
+            }
+            break;
+        case ggml_backend_hrx_topk_moe_variant::auto_select:
+            if (n_rows == 1 && provider_available(device_context->topk_moe_f32_wave32_provider)) {
+                return device_context->topk_moe_f32_wave32_provider;
+            }
+            if (provider_available(device_context->topk_moe_f32_shared4_provider)) {
+                return device_context->topk_moe_f32_shared4_provider;
+            }
+            break;
+    }
+
+    return baseline;
 }
 
 static bool ggml_backend_hrx_supports_rope_f32(
@@ -3993,6 +4160,71 @@ static ggml_status ggml_backend_hrx_dispatch_argsort_f32(
     return GGML_STATUS_SUCCESS;
 }
 
+static ggml_status ggml_backend_hrx_dispatch_topk_moe_f32(
+        ggml_backend_hrx_context * context,
+        const ggml_tensor * soft_max,
+        const ggml_tensor * weights,
+        const ggml_tensor * ids,
+        const ggml_tensor * clamp) {
+    const ggml_tensor * logits = soft_max->src[0];
+    hrx_buffer_ref_t bindings[3] = {};
+    if (!ggml_backend_hrx_tensor_buffer_ref(logits, &bindings[0]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(weights, &bindings[1]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(ids, &bindings[2])) {
+        GGML_LOG_ERROR("%s: TOPK_MOE tensor is not backed by a HRX buffer\n", __func__);
+        return GGML_STATUS_FAILED;
+    }
+
+    float scale = 1.0f;
+    std::memcpy(&scale, reinterpret_cast<const int32_t *>(soft_max->op_params), sizeof(float));
+    float clamp_min = -std::numeric_limits<float>::infinity();
+    float clamp_max = std::numeric_limits<float>::infinity();
+    if (clamp) {
+        std::memcpy(&clamp_min, reinterpret_cast<const int32_t *>(clamp->op_params), sizeof(float));
+        std::memcpy(&clamp_max, reinterpret_cast<const int32_t *>(clamp->op_params) + 1, sizeof(float));
+    }
+
+    const int64_t n_rows = ggml_nrows(logits);
+    const int64_t n_expert_used = ggml_nelements(weights) / n_rows;
+    ggml_backend_hrx_topk_moe_f32_constants constants = {
+        /* .n_experts     = */ logits->ne[0],
+        /* .n_rows        = */ n_rows,
+        /* .n_expert_used = */ n_expert_used,
+        /* .logits_nb1    = */ static_cast<int64_t>(logits->nb[1]),
+        /* .weights_nb1   = */ ggml_backend_hrx_topk_moe_row_stride(weights, n_expert_used),
+        /* .weights_nb_k  = */ ggml_backend_hrx_topk_moe_k_stride(weights, n_expert_used),
+        /* .ids_nb1       = */ ggml_backend_hrx_topk_moe_row_stride(ids, n_expert_used),
+        /* .ids_nb_k      = */ ggml_backend_hrx_topk_moe_k_stride(ids, n_expert_used),
+        /* .scale         = */ scale,
+        /* .clamp_min     = */ clamp_min,
+        /* .clamp_max     = */ clamp_max,
+        /* .with_norm     = */ clamp ? 1 : 0,
+    };
+
+    const auto & provider = ggml_backend_hrx_select_topk_moe_f32_provider(
+        context->device_context, constants.n_rows);
+    const uint32_t workgroup_size_x = provider.export_info.workgroup_size[0] ?
+        provider.export_info.workgroup_size[0] : 64;
+    const uint32_t workgroup_size_y = provider.export_info.workgroup_size[1] ?
+        provider.export_info.workgroup_size[1] : 1;
+    hrx_dispatch_config_t config = {
+        /* .workgroup_count = */ {
+            static_cast<uint32_t>((constants.n_rows + workgroup_size_y - 1) / workgroup_size_y),
+            1,
+            1,
+        },
+        /* .workgroup_size = */ { workgroup_size_x, workgroup_size_y, 1 },
+        /* .subgroup_size = */ 0,
+    };
+
+    if (!GGML_HRX_CHECK(hrx_stream_dispatch(
+            context->stream, provider.executable, provider.export_ordinal, &config,
+            &constants, sizeof(constants), bindings, 3, HRX_DISPATCH_FLAG_NONE))) {
+        return GGML_STATUS_FAILED;
+    }
+    return GGML_STATUS_SUCCESS;
+}
+
 static ggml_status ggml_backend_hrx_dispatch_rope_f32(
         ggml_backend_hrx_context * context,
         const ggml_tensor * dst) {
@@ -4202,6 +4434,164 @@ static ggml_status ggml_backend_hrx_dispatch_mul(ggml_backend_hrx_context * cont
         context, dst, context->device_context->mul_broadcast_provider, "MUL", false);
 }
 
+struct ggml_backend_hrx_topk_moe_fusion {
+    const ggml_tensor * soft_max = nullptr;
+    const ggml_tensor * weights = nullptr;
+    const ggml_tensor * ids = nullptr;
+    const ggml_tensor * clamp = nullptr;
+    int last_idx = -1;
+    int ids_idx = -1;
+    int weights_idx = -1;
+    std::vector<int> idxs;
+    std::vector<ggml_op> ops;
+};
+
+static bool ggml_backend_hrx_tensors_overlap(const ggml_tensor * a, const ggml_tensor * b) {
+    const uintptr_t a_start = reinterpret_cast<uintptr_t>(a->data);
+    const uintptr_t a_end = a_start + ggml_nbytes(a);
+    const uintptr_t b_start = reinterpret_cast<uintptr_t>(b->data);
+    const uintptr_t b_end = b_start + ggml_nbytes(b);
+    return (b_start <= a_start && a_start < b_end) ||
+           (a_start <= b_start && b_start < a_end);
+}
+
+static bool ggml_backend_hrx_topk_moe_fusion_memory_safe(
+        const ggml_cgraph * cgraph,
+        const ggml_backend_hrx_topk_moe_fusion & fusion) {
+    const ggml_tensor * logits = fusion.soft_max ? fusion.soft_max->src[0] : nullptr;
+    if (logits && ggml_nrows(logits) == 1) {
+        return true;
+    }
+
+    const int output_idxs[2] = { fusion.ids_idx, fusion.weights_idx };
+    for (int output_idx : output_idxs) {
+        const ggml_tensor * dst = cgraph->nodes[output_idx];
+        for (size_t i = 0; i < fusion.idxs.size(); ++i) {
+            const ggml_tensor * node = cgraph->nodes[fusion.idxs[i]];
+            for (int src_idx = 0; src_idx < GGML_MAX_SRC; ++src_idx) {
+                const ggml_tensor * src = node->src[src_idx];
+                if (!src || src->op == GGML_OP_NONE ||
+                    !ggml_backend_hrx_tensors_overlap(dst, src)) {
+                    continue;
+                }
+
+                bool elided_source = false;
+                for (size_t prev = 0; prev < i; ++prev) {
+                    if (cgraph->nodes[fusion.idxs[prev]] == src) {
+                        elided_source = true;
+                        break;
+                    }
+                }
+                if (!elided_source) {
+                    return false;
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
+static bool ggml_backend_hrx_try_topk_moe_fusion(
+        const ggml_cgraph * cgraph,
+        int start,
+        const ggml_backend_hrx_device_context * device_context,
+        ggml_backend_hrx_topk_moe_fusion * fusion) {
+    *fusion = {};
+    if (start >= cgraph->n_nodes || cgraph->nodes[start]->op != GGML_OP_SOFT_MAX) {
+        return false;
+    }
+
+    auto add = [&](int idx) {
+        fusion->idxs.push_back(idx);
+        fusion->ops.push_back(cgraph->nodes[idx]->op);
+    };
+    auto next = [&](int idx) -> const ggml_tensor * {
+        return idx < cgraph->n_nodes ? cgraph->nodes[idx] : nullptr;
+    };
+
+    fusion->soft_max = cgraph->nodes[start];
+    add(start);
+
+    int idx = start + 1;
+    const ggml_tensor * probs = fusion->soft_max;
+    if (next(idx) && next(idx)->op == GGML_OP_RESHAPE && next(idx)->src[0] == probs) {
+        probs = next(idx);
+        add(idx++);
+    }
+
+    const ggml_tensor * argsort = next(idx);
+    if (!argsort || argsort->op != GGML_OP_ARGSORT ||
+        (argsort->src[0] != fusion->soft_max && argsort->src[0] != probs) ||
+        ggml_get_op_params_i32(argsort, 0) != GGML_SORT_ORDER_DESC) {
+        return false;
+    }
+    add(idx++);
+
+    const ggml_tensor * ids = next(idx);
+    if (!ids || ids->op != GGML_OP_VIEW || ids->src[0] != argsort) {
+        return false;
+    }
+    fusion->ids = ids;
+    fusion->ids_idx = idx;
+    add(idx++);
+
+    const ggml_tensor * selected = next(idx);
+    if (!selected || selected->op != GGML_OP_GET_ROWS ||
+        selected->src[0] != probs || selected->src[1] != ids) {
+        return false;
+    }
+    add(idx++);
+
+    const ggml_tensor * weights_base = selected;
+    if (next(idx) && next(idx)->op == GGML_OP_RESHAPE && next(idx)->src[0] == weights_base) {
+        weights_base = next(idx);
+        add(idx++);
+    }
+
+    const ggml_tensor * sum_rows = next(idx);
+    if (sum_rows && sum_rows->op == GGML_OP_SUM_ROWS && sum_rows->src[0] == weights_base) {
+        add(idx++);
+        const ggml_tensor * clamp = next(idx);
+        if (!clamp || clamp->op != GGML_OP_CLAMP || clamp->src[0] != sum_rows) {
+            return false;
+        }
+        fusion->clamp = clamp;
+        add(idx++);
+
+        const ggml_tensor * div = next(idx);
+        if (!div || div->op != GGML_OP_DIV || div->src[0] != weights_base || div->src[1] != clamp) {
+            return false;
+        }
+        weights_base = div;
+        add(idx++);
+
+        if (next(idx) && next(idx)->op == GGML_OP_RESHAPE && next(idx)->src[0] == weights_base) {
+            weights_base = next(idx);
+            add(idx++);
+        }
+    }
+
+    fusion->weights = weights_base;
+    fusion->weights_idx = fusion->idxs.back();
+    fusion->last_idx = fusion->idxs.back();
+
+    if (!ggml_backend_hrx_supports_topk_moe_f32(
+            device_context, fusion->soft_max, fusion->weights, fusion->ids)) {
+        return false;
+    }
+
+    const int outputs[2] = { fusion->ids_idx, fusion->weights_idx };
+    return ggml_can_fuse_subgraph_ext(
+        cgraph,
+        fusion->idxs.data(),
+        static_cast<int>(fusion->idxs.size()),
+        fusion->ops.data(),
+        outputs,
+        2) &&
+        ggml_backend_hrx_topk_moe_fusion_memory_safe(cgraph, *fusion);
+}
+
 static ggml_status ggml_backend_hrx_graph_compute(ggml_backend_t backend, ggml_cgraph * cgraph) {
     auto * context = static_cast<ggml_backend_hrx_context *>(backend->context);
     if (!ggml_backend_hrx_sync_streams(context->device_context)) {
@@ -4214,6 +4604,17 @@ static ggml_status ggml_backend_hrx_graph_compute(ggml_backend_t backend, ggml_c
 
     for (int i = 0; i < cgraph->n_nodes; ++i) {
         const ggml_tensor * node = cgraph->nodes[i];
+        ggml_backend_hrx_topk_moe_fusion topk_moe;
+        if (!ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_FUSION") &&
+            ggml_backend_hrx_try_topk_moe_fusion(cgraph, i, context->device_context, &topk_moe)) {
+            if (ggml_backend_hrx_dispatch_topk_moe_f32(
+                    context, topk_moe.soft_max, topk_moe.weights, topk_moe.ids, topk_moe.clamp) !=
+                GGML_STATUS_SUCCESS) {
+                return GGML_STATUS_FAILED;
+            }
+            i = topk_moe.last_idx;
+            continue;
+        }
         switch (node->op) {
             case GGML_OP_NONE:
             case GGML_OP_RESHAPE:
@@ -4717,6 +5118,7 @@ static std::unique_ptr<ggml_backend_hrx_reg_context> ggml_backend_hrx_create_reg
         (void) ggml_backend_hrx_load_soft_max_f32_provider(device_context.get());
         (void) ggml_backend_hrx_load_soft_max_f32_mask_provider(device_context.get());
         (void) ggml_backend_hrx_load_argsort_f32_provider(device_context.get());
+        (void) ggml_backend_hrx_load_topk_moe_f32_providers(device_context.get());
         (void) ggml_backend_hrx_load_rope_f32_provider(device_context.get());
         (void) ggml_backend_hrx_load_ssm_conv_provider(device_context.get());
         (void) ggml_backend_hrx_load_gated_delta_net_provider(device_context.get());
