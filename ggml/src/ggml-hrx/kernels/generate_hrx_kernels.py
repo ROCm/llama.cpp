@@ -250,12 +250,28 @@ KERNELS = [
         "workgroup_size": (256, 1, 1),
     },
     {
+        "name": "hrx_mul_mat_vec_f16_batched_f32",
+        "source": "mul_mat_vec_f16_batched.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "constants_size": 128,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
         "name": "hrx_mul_mat_vec_f32_f32",
         "source": "mul_mat_vec_f32.hip.cpp",
         "format": None,
         "binding_count": 3,
         "parameter_count": 6,
         "constants_size": 24,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_mul_mat_vec_f32_batched_f32",
+        "source": "mul_mat_vec_f32_batched.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "constants_size": 128,
         "workgroup_size": (256, 1, 1),
     },
     {

@@ -117,6 +117,39 @@ static std::vector<float> reference_mul_mat(
     return output;
 }
 
+static std::vector<float> reference_mul_mat_batched(
+        const std::vector<float> & lhs,
+        const std::vector<float> & rhs,
+        int64_t k,
+        int64_t rows,
+        int64_t cols,
+        int64_t lhs_ne2,
+        int64_t lhs_ne3,
+        int64_t out_ne2,
+        int64_t out_ne3) {
+    std::vector<float> output(static_cast<size_t>(rows * cols * out_ne2 * out_ne3), 0.0f);
+    for (int64_t i3 = 0; i3 < out_ne3; ++i3) {
+        const int64_t lhs_i3 = lhs_ne3 == out_ne3 ? i3 : i3 / (out_ne3 / lhs_ne3);
+        for (int64_t i2 = 0; i2 < out_ne2; ++i2) {
+            const int64_t lhs_i2 = lhs_ne2 == out_ne2 ? i2 : i2 / (out_ne2 / lhs_ne2);
+            for (int64_t col = 0; col < cols; ++col) {
+                for (int64_t row = 0; row < rows; ++row) {
+                    float sum = 0.0f;
+                    for (int64_t i = 0; i < k; ++i) {
+                        const size_t lhs_idx = static_cast<size_t>(
+                            i + k * (row + rows * (lhs_i2 + lhs_ne2 * lhs_i3)));
+                        const size_t rhs_idx = static_cast<size_t>(
+                            i + k * (col + cols * (i2 + out_ne2 * i3)));
+                        sum += lhs[lhs_idx] * rhs[rhs_idx];
+                    }
+                    output[static_cast<size_t>(row + rows * (col + cols * (i2 + out_ne2 * i3)))] = sum;
+                }
+            }
+        }
+    }
+    return output;
+}
+
 static void prepare_rows(
         ggml_type type,
         int64_t ncols,
@@ -198,6 +231,58 @@ static void run_mul_mat_vec_case(
     std::vector<float> actual(static_cast<size_t>(rows * cols), -1.0f);
     ggml_backend_tensor_get(out, actual.data(), 0, actual.size() * sizeof(float));
     expect_near(actual, reference_mul_mat(lhs_reference, rhs_f32, k, rows, cols), tolerance, label);
+}
+
+static void run_mul_mat_vec_batched_case(
+        ggml_backend_t backend,
+        ggml_backend_dev_t dev,
+        ggml_type lhs_type,
+        int64_t k,
+        int64_t rows,
+        int64_t cols,
+        int64_t lhs_ne2,
+        int64_t lhs_ne3,
+        int64_t out_ne2,
+        int64_t out_ne3,
+        float tolerance,
+        const char * label) {
+    GGML_ASSERT(k % ggml_blck_size(lhs_type) == 0);
+    GGML_ASSERT(out_ne2 % lhs_ne2 == 0);
+    GGML_ASSERT(out_ne3 % lhs_ne3 == 0);
+
+    ggml_context_ptr ctx = make_context();
+    ggml_tensor * lhs = ggml_new_tensor_4d(ctx.get(), lhs_type, k, rows, lhs_ne2, lhs_ne3);
+    ggml_tensor * rhs = ggml_new_tensor_4d(ctx.get(), GGML_TYPE_F32, k, cols, out_ne2, out_ne3);
+    ggml_tensor * out = ggml_mul_mat(ctx.get(), lhs, rhs);
+    GGML_ASSERT(ggml_backend_dev_supports_op(dev, out));
+
+    ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 16, false);
+    ggml_build_forward_expand(graph, out);
+
+    ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
+    GGML_ASSERT(buffer != nullptr);
+
+    std::vector<float> lhs_f32(static_cast<size_t>(k * rows * lhs_ne2 * lhs_ne3));
+    std::vector<float> rhs_f32(static_cast<size_t>(k * cols * out_ne2 * out_ne3));
+    for (size_t i = 0; i < lhs_f32.size(); ++i) {
+        lhs_f32[i] = static_cast<float>(static_cast<int>((i * 19 + 7) % 113) - 56) / 43.0f;
+    }
+    for (size_t i = 0; i < rhs_f32.size(); ++i) {
+        rhs_f32[i] = static_cast<float>(static_cast<int>((i * 23 + 3) % 97) - 48) / 47.0f;
+    }
+
+    std::vector<float> lhs_reference;
+    std::vector<uint8_t> lhs_storage;
+    prepare_mul_mat_lhs(lhs_type, k, rows * lhs_ne2 * lhs_ne3, lhs_f32, lhs_reference, lhs_storage);
+
+    ggml_backend_tensor_set(lhs, lhs_storage.data(), 0, lhs_storage.size());
+    ggml_backend_tensor_set(rhs, rhs_f32.data(), 0, rhs_f32.size() * sizeof(float));
+    GGML_ASSERT(ggml_backend_graph_compute(backend, graph) == GGML_STATUS_SUCCESS);
+
+    expect_near(
+        tensor_to_float(out),
+        reference_mul_mat_batched(lhs_reference, rhs_f32, k, rows, cols, lhs_ne2, lhs_ne3, out_ne2, out_ne3),
+        tolerance, label);
 }
 
 static size_t index_4d(int64_t i0, int64_t i1, int64_t i2, int64_t i3, int64_t ne0, int64_t ne1, int64_t ne2) {
@@ -1478,6 +1563,12 @@ int main() {
         run_mul_mat_vec_case(backend.get(), dev, GGML_TYPE_F32, 17, 3, 2, 2.0e-4f, "mul_mat_vec_f32");
         run_mul_mat_vec_case(backend.get(), dev, GGML_TYPE_F16, 257, 3, 2, 2.0e-4f, "mul_mat_vec_f16");
         run_mul_mat_vec_case(backend.get(), dev, GGML_TYPE_BF16, 257, 3, 2, 2.0e-3f, "mul_mat_vec_bf16");
+        run_mul_mat_vec_batched_case(
+            backend.get(), dev, GGML_TYPE_F32, 17, 3, 2, 2, 1, 4, 3,
+            3.0e-4f, "mul_mat_vec_f32_batched");
+        run_mul_mat_vec_batched_case(
+            backend.get(), dev, GGML_TYPE_F16, 129, 2, 3, 1, 1, 3, 2,
+            1.0e-3f, "mul_mat_vec_f16_batched");
         run_mul_mat_vec_case(
             backend.get(), dev, GGML_TYPE_Q4_K, ggml_blck_size(GGML_TYPE_Q4_K), 3, 1,
             4.0e-4f, "mul_mat_vec_q4_k_one_block");

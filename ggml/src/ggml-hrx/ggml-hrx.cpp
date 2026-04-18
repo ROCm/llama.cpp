@@ -191,6 +191,27 @@ struct ggml_backend_hrx_mul_mat_vec_constants {
 
 static_assert(sizeof(ggml_backend_hrx_mul_mat_vec_constants) == 24);
 
+struct ggml_backend_hrx_mul_mat_vec_batched_constants {
+    int64_t k;
+    int64_t rows;
+    int64_t cols;
+    int64_t dst_ne2;
+    int64_t dst_ne3;
+    int64_t src0_ne2;
+    int64_t src0_ne3;
+    int64_t src0_nb1;
+    int64_t src0_nb2;
+    int64_t src0_nb3;
+    int64_t src1_nb1;
+    int64_t src1_nb2;
+    int64_t src1_nb3;
+    int64_t dst_nb1;
+    int64_t dst_nb2;
+    int64_t dst_nb3;
+};
+
+static_assert(sizeof(ggml_backend_hrx_mul_mat_vec_batched_constants) == 128);
+
 struct ggml_backend_hrx_flash_attn_ext_f32_decode_constants {
     int64_t D;
     int64_t KV;
@@ -393,7 +414,9 @@ struct ggml_backend_hrx_device_context {
     ggml_backend_hrx_op_provider get_rows_q5_k_provider;
     ggml_backend_hrx_op_provider mul_mat_vec_bf16_provider;
     ggml_backend_hrx_op_provider mul_mat_vec_f16_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_f16_batched_provider;
     ggml_backend_hrx_op_provider mul_mat_vec_f32_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_f32_batched_provider;
     ggml_backend_hrx_op_provider mul_mat_vec_q4_k_provider;
     ggml_backend_hrx_op_provider mul_mat_vec_q5_k_provider;
     ggml_backend_hrx_op_provider mul_mat_vec_q6_k_provider;
@@ -442,7 +465,9 @@ static void ggml_backend_hrx_reset_providers(ggml_backend_hrx_device_context * d
     device_context->get_rows_q5_k_provider.reset();
     device_context->mul_mat_vec_bf16_provider.reset();
     device_context->mul_mat_vec_f16_provider.reset();
+    device_context->mul_mat_vec_f16_batched_provider.reset();
     device_context->mul_mat_vec_f32_provider.reset();
+    device_context->mul_mat_vec_f32_batched_provider.reset();
     device_context->mul_mat_vec_q4_k_provider.reset();
     device_context->mul_mat_vec_q5_k_provider.reset();
     device_context->mul_mat_vec_q6_k_provider.reset();
@@ -1336,7 +1361,11 @@ static bool ggml_backend_hrx_load_mul_mat_vec_providers(ggml_backend_hrx_device_
     ok = ggml_backend_hrx_load_catalog_provider(
         device_context, "hrx_mul_mat_vec_f16_f32", &device_context->mul_mat_vec_f16_provider) || ok;
     ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_f16_batched_f32", &device_context->mul_mat_vec_f16_batched_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
         device_context, "hrx_mul_mat_vec_f32_f32", &device_context->mul_mat_vec_f32_provider) || ok;
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_f32_batched_f32", &device_context->mul_mat_vec_f32_batched_provider) || ok;
     ok = ggml_backend_hrx_load_catalog_provider(
         device_context, "hrx_mul_mat_vec_q4_k_f32", &device_context->mul_mat_vec_q4_k_provider) || ok;
     ok = ggml_backend_hrx_load_catalog_provider(
@@ -1954,13 +1983,22 @@ static const ggml_backend_hrx_op_provider * ggml_backend_hrx_mul_mat_vec_provide
     }
 }
 
-static bool ggml_backend_hrx_supports_mul_mat_vec(
+static const ggml_backend_hrx_op_provider * ggml_backend_hrx_mul_mat_vec_batched_provider(
+        const ggml_backend_hrx_device_context * device_context,
+        ggml_type type) {
+    switch (type) {
+        case GGML_TYPE_F16:
+            return &device_context->mul_mat_vec_f16_batched_provider;
+        case GGML_TYPE_F32:
+            return &device_context->mul_mat_vec_f32_batched_provider;
+        default:
+            return nullptr;
+    }
+}
+
+static bool ggml_backend_hrx_supports_mul_mat_vec_2d(
         const ggml_backend_hrx_device_context * device_context,
         const ggml_tensor * op) {
-    if (ggml_backend_hrx_approximate_kernels_disabled()) {
-        return false;
-    }
-
     const ggml_tensor * src0 = op->src[0];
     const ggml_tensor * src1 = op->src[1];
     if (!src0 || !src1) {
@@ -1988,6 +2026,60 @@ static bool ggml_backend_hrx_supports_mul_mat_vec(
            ggml_is_contiguous(src0) &&
            ggml_is_contiguous(src1) &&
            ggml_is_contiguous(op);
+}
+
+static bool ggml_backend_hrx_supports_mul_mat_vec_batched(
+        const ggml_backend_hrx_device_context * device_context,
+        const ggml_tensor * op) {
+    const ggml_tensor * src0 = op->src[0];
+    const ggml_tensor * src1 = op->src[1];
+    if (!src0 || !src1) {
+        return false;
+    }
+
+    const ggml_backend_hrx_op_provider * provider =
+        ggml_backend_hrx_mul_mat_vec_batched_provider(device_context, src0->type);
+    return provider &&
+           provider->kind == ggml_backend_hrx_provider_kind::hsaco &&
+           (src0->type == GGML_TYPE_F16 || src0->type == GGML_TYPE_F32) &&
+           src1->type == GGML_TYPE_F32 &&
+           op->type == GGML_TYPE_F32 &&
+           src0->ne[0] == src1->ne[0] &&
+           op->ne[0] == src0->ne[1] &&
+           op->ne[1] == src1->ne[1] &&
+           op->ne[2] == src1->ne[2] &&
+           op->ne[3] == src1->ne[3] &&
+           (src0->ne[2] != 1 || src0->ne[3] != 1 ||
+            src1->ne[2] != 1 || src1->ne[3] != 1 ||
+            op->ne[2] != 1 || op->ne[3] != 1) &&
+           src0->ne[0] > 0 &&
+           src0->ne[1] > 0 &&
+           src0->ne[2] > 0 &&
+           src0->ne[3] > 0 &&
+           src1->ne[1] > 0 &&
+           src1->ne[2] > 0 &&
+           src1->ne[3] > 0 &&
+           src0->ne[1] <= std::numeric_limits<uint32_t>::max() &&
+           src1->ne[1] <= std::numeric_limits<uint32_t>::max() / op->ne[2] &&
+           src1->ne[1] * op->ne[2] <= std::numeric_limits<uint32_t>::max() / op->ne[3] &&
+           op->ne[2] >= src0->ne[2] &&
+           op->ne[3] >= src0->ne[3] &&
+           (op->ne[2] % src0->ne[2]) == 0 &&
+           (op->ne[3] % src0->ne[3]) == 0 &&
+           src0->nb[0] == ggml_type_size(src0->type) &&
+           src1->nb[0] == sizeof(float) &&
+           op->nb[0] == sizeof(float);
+}
+
+static bool ggml_backend_hrx_supports_mul_mat_vec(
+        const ggml_backend_hrx_device_context * device_context,
+        const ggml_tensor * op) {
+    if (ggml_backend_hrx_approximate_kernels_disabled()) {
+        return false;
+    }
+
+    return ggml_backend_hrx_supports_mul_mat_vec_2d(device_context, op) ||
+           ggml_backend_hrx_supports_mul_mat_vec_batched(device_context, op);
 }
 
 static const ggml_backend_hrx_op_provider * ggml_backend_hrx_flash_attn_ext_f32_decode_provider(
@@ -2973,6 +3065,54 @@ static ggml_status ggml_backend_hrx_dispatch_mul_mat_vec(
         !ggml_backend_hrx_tensor_buffer_ref(dst, &bindings[2])) {
         GGML_LOG_ERROR("%s: MUL_MAT tensor is not backed by a HRX buffer\n", __func__);
         return GGML_STATUS_FAILED;
+    }
+
+    if (ggml_backend_hrx_supports_mul_mat_vec_batched(context->device_context, dst)) {
+        ggml_backend_hrx_mul_mat_vec_batched_constants constants = {
+            /* .k         = */ src0->ne[0],
+            /* .rows      = */ src0->ne[1],
+            /* .cols      = */ src1->ne[1],
+            /* .dst_ne2   = */ dst->ne[2],
+            /* .dst_ne3   = */ dst->ne[3],
+            /* .src0_ne2  = */ src0->ne[2],
+            /* .src0_ne3  = */ src0->ne[3],
+            /* .src0_nb1  = */ static_cast<int64_t>(src0->nb[1]),
+            /* .src0_nb2  = */ static_cast<int64_t>(src0->nb[2]),
+            /* .src0_nb3  = */ static_cast<int64_t>(src0->nb[3]),
+            /* .src1_nb1  = */ static_cast<int64_t>(src1->nb[1]),
+            /* .src1_nb2  = */ static_cast<int64_t>(src1->nb[2]),
+            /* .src1_nb3  = */ static_cast<int64_t>(src1->nb[3]),
+            /* .dst_nb1   = */ static_cast<int64_t>(dst->nb[1]),
+            /* .dst_nb2   = */ static_cast<int64_t>(dst->nb[2]),
+            /* .dst_nb3   = */ static_cast<int64_t>(dst->nb[3]),
+        };
+
+        const ggml_backend_hrx_op_provider * provider =
+            ggml_backend_hrx_mul_mat_vec_batched_provider(context->device_context, src0->type);
+        if (!provider || provider->kind != ggml_backend_hrx_provider_kind::hsaco) {
+            GGML_LOG_ERROR("%s: batched MUL_MAT provider is unavailable\n", __func__);
+            return GGML_STATUS_FAILED;
+        }
+
+        const uint32_t workgroup_size = provider->export_info.workgroup_size[0] ?
+            provider->export_info.workgroup_size[0] : 256;
+        hrx_dispatch_config_t config = {
+            /* .workgroup_count = */ {
+                static_cast<uint32_t>(constants.rows),
+                static_cast<uint32_t>(constants.cols * constants.dst_ne2 * constants.dst_ne3),
+                1,
+            },
+            /* .workgroup_size = */ { workgroup_size, 1, 1 },
+            /* .subgroup_size = */ 0,
+        };
+
+        if (!GGML_HRX_CHECK(hrx_stream_dispatch(
+                context->stream, provider->executable, provider->export_ordinal, &config,
+                &constants, sizeof(constants), bindings, 3, HRX_DISPATCH_FLAG_NONE))) {
+            return GGML_STATUS_FAILED;
+        }
+
+        return GGML_STATUS_SUCCESS;
     }
 
     ggml_backend_hrx_mul_mat_vec_constants constants = {
