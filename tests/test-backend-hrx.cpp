@@ -2308,6 +2308,181 @@ static void run_rms_norm_mul_fusion_case(
     expect_near(tensor_to_float(out), expected, 3.0e-5f, label);
 }
 
+static void run_add_rms_norm_mul_fusion_case(ggml_backend_t backend, ggml_backend_dev_t dev, const char * label) {
+    static constexpr int64_t NCOLS = 128;
+    static constexpr int64_t NE1 = 3;
+    static constexpr int64_t NE2 = 2;
+    static constexpr float EPS = 1.0e-6f;
+
+    ggml_context_ptr ctx = make_context();
+    ggml_tensor * src = ggml_new_tensor_3d(ctx.get(), GGML_TYPE_F32, NCOLS, NE1, NE2);
+    ggml_tensor * add_rhs = ggml_new_tensor_3d(ctx.get(), GGML_TYPE_F32, NCOLS, 1, 1);
+    ggml_tensor * weight = ggml_new_tensor_3d(ctx.get(), GGML_TYPE_F32, NCOLS, NE1, 1);
+    ggml_tensor * add = ggml_add(ctx.get(), src, add_rhs);
+    ggml_tensor * rms = ggml_rms_norm(ctx.get(), add, EPS);
+    ggml_tensor * out = ggml_mul(ctx.get(), rms, weight);
+    GGML_ASSERT(ggml_backend_dev_supports_op(dev, out));
+
+    ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 16, false);
+    ggml_build_forward_expand(graph, out);
+    ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
+    GGML_ASSERT(buffer != nullptr);
+
+    std::vector<float> src_data(static_cast<size_t>(NCOLS * NE1 * NE2));
+    std::vector<float> add_rhs_data(static_cast<size_t>(NCOLS));
+    std::vector<float> weight_data(static_cast<size_t>(NCOLS * NE1));
+    for (size_t i = 0; i < src_data.size(); ++i) {
+        src_data[i] = static_cast<float>(static_cast<int>((i * 17 + 11) % 47) - 23) / 41.0f;
+    }
+    for (int64_t col = 0; col < NCOLS; ++col) {
+        add_rhs_data[static_cast<size_t>(col)] = 0.01f * static_cast<float>((col % 17) - 8);
+    }
+    for (int64_t row = 0; row < NE1; ++row) {
+        for (int64_t col = 0; col < NCOLS; ++col) {
+            weight_data[static_cast<size_t>(col + NCOLS * row)] =
+                0.5f + static_cast<float>((col + 3 * row) % 13) * 0.0625f;
+        }
+    }
+
+    ggml_backend_tensor_set(src, src_data.data(), 0, src_data.size() * sizeof(float));
+    ggml_backend_tensor_set(add_rhs, add_rhs_data.data(), 0, add_rhs_data.size() * sizeof(float));
+    ggml_backend_tensor_set(weight, weight_data.data(), 0, weight_data.size() * sizeof(float));
+
+    scoped_env_var disable_add("GGML_HRX_DISABLE_ADD", "1");
+    scoped_env_var disable_mul("GGML_HRX_DISABLE_MUL", "1");
+    GGML_ASSERT(ggml_backend_graph_compute(backend, graph) == GGML_STATUS_SUCCESS);
+
+    std::vector<float> add_expected(src_data.size());
+    for (int64_t row = 0; row < NE1 * NE2; ++row) {
+        for (int64_t col = 0; col < NCOLS; ++col) {
+            add_expected[static_cast<size_t>(row * NCOLS + col)] =
+                src_data[static_cast<size_t>(row * NCOLS + col)] + add_rhs_data[static_cast<size_t>(col)];
+        }
+    }
+    expect_near(tensor_to_float(add), add_expected, 1.0e-6f, "add_rms_norm_mul_fusion_add");
+    expect_near(
+        tensor_to_float(out),
+        reference_rms_norm_mul(add_expected, weight_data, NCOLS, NE1, NE2, NE1, 1, EPS),
+        3.0e-5f,
+        label);
+}
+
+static void run_add_add_fusion_case(ggml_backend_t backend, ggml_backend_dev_t dev, int64_t ncols, int64_t nrows) {
+    ggml_context_ptr ctx = make_context();
+    ggml_tensor * lhs = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, ncols, nrows);
+    ggml_tensor * rhs0 = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, ncols, 1);
+    ggml_tensor * rhs1 = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, ncols, 1);
+    ggml_tensor * first = ggml_add(ctx.get(), lhs, rhs0);
+    ggml_tensor * out = ggml_add(ctx.get(), first, rhs1);
+    GGML_ASSERT(ggml_backend_dev_supports_op(dev, out));
+
+    ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 16, false);
+    ggml_build_forward_expand(graph, out);
+    ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
+    GGML_ASSERT(buffer != nullptr);
+
+    std::vector<float> lhs_data(static_cast<size_t>(ncols * nrows));
+    std::vector<float> rhs0_data(static_cast<size_t>(ncols));
+    std::vector<float> rhs1_data(static_cast<size_t>(ncols));
+    std::vector<float> expected(lhs_data.size());
+    for (int64_t col = 0; col < ncols; ++col) {
+        rhs0_data[static_cast<size_t>(col)] = 0.01f * static_cast<float>(col - 9);
+        rhs1_data[static_cast<size_t>(col)] = -0.02f * static_cast<float>(col - 5);
+    }
+    for (int64_t row = 0; row < nrows; ++row) {
+        for (int64_t col = 0; col < ncols; ++col) {
+            const size_t index = static_cast<size_t>(row * ncols + col);
+            lhs_data[index] = 0.001f * static_cast<float>(index) - 0.08f;
+            expected[index] = lhs_data[index] + rhs0_data[static_cast<size_t>(col)] +
+                rhs1_data[static_cast<size_t>(col)];
+        }
+    }
+
+    ggml_backend_tensor_set(lhs, lhs_data.data(), 0, lhs_data.size() * sizeof(float));
+    ggml_backend_tensor_set(rhs0, rhs0_data.data(), 0, rhs0_data.size() * sizeof(float));
+    ggml_backend_tensor_set(rhs1, rhs1_data.data(), 0, rhs1_data.size() * sizeof(float));
+    scoped_env_var disable_add("GGML_HRX_DISABLE_ADD", "1");
+    GGML_ASSERT(ggml_backend_graph_compute(backend, graph) == GGML_STATUS_SUCCESS);
+    expect_near(tensor_to_float(out), expected, 1.0e-6f, "add_add_fusion");
+}
+
+static void run_add_softplus_mul_fusion_case(ggml_backend_t backend, ggml_backend_dev_t dev) {
+    constexpr int64_t cols = 32;
+    constexpr int64_t rows = 7;
+
+    ggml_context_ptr ctx = make_context();
+    ggml_tensor * lhs = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, cols, rows);
+    ggml_tensor * add_rhs = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, cols, 1);
+    ggml_tensor * mul_rhs = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, cols, 1);
+    ggml_tensor * sum = ggml_add(ctx.get(), lhs, add_rhs);
+    ggml_tensor * softplus = ggml_softplus(ctx.get(), sum);
+    ggml_tensor * out = ggml_mul(ctx.get(), softplus, mul_rhs);
+    GGML_ASSERT(ggml_backend_dev_supports_op(dev, out));
+
+    ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 16, false);
+    ggml_build_forward_expand(graph, out);
+    ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
+    GGML_ASSERT(buffer != nullptr);
+
+    std::vector<float> lhs_data(static_cast<size_t>(cols * rows));
+    std::vector<float> add_rhs_data(static_cast<size_t>(cols));
+    std::vector<float> mul_rhs_data(static_cast<size_t>(cols));
+    std::vector<float> expected(lhs_data.size());
+    for (int64_t col = 0; col < cols; ++col) {
+        add_rhs_data[static_cast<size_t>(col)] = 0.01f * static_cast<float>(col - 16);
+        mul_rhs_data[static_cast<size_t>(col)] = 0.5f + 0.02f * static_cast<float>(col);
+    }
+    for (int64_t row = 0; row < rows; ++row) {
+        for (int64_t col = 0; col < cols; ++col) {
+            const size_t index = static_cast<size_t>(row * cols + col);
+            const float x = 0.001f * static_cast<float>(index) - 0.1f;
+            lhs_data[index] = x;
+            const float y = x + add_rhs_data[static_cast<size_t>(col)];
+            const float softplus_y = y > 20.0f ? y : std::log(1.0f + std::exp(y));
+            expected[index] = softplus_y * mul_rhs_data[static_cast<size_t>(col)];
+        }
+    }
+
+    ggml_backend_tensor_set(lhs, lhs_data.data(), 0, lhs_data.size() * sizeof(float));
+    ggml_backend_tensor_set(add_rhs, add_rhs_data.data(), 0, add_rhs_data.size() * sizeof(float));
+    ggml_backend_tensor_set(mul_rhs, mul_rhs_data.data(), 0, mul_rhs_data.size() * sizeof(float));
+    scoped_env_var disable_add("GGML_HRX_DISABLE_ADD", "1");
+    scoped_env_var disable_softplus("GGML_HRX_DISABLE_SOFTPLUS", "1");
+    scoped_env_var disable_mul("GGML_HRX_DISABLE_MUL", "1");
+    GGML_ASSERT(ggml_backend_graph_compute(backend, graph) == GGML_STATUS_SUCCESS);
+    expect_near(tensor_to_float(out), expected, 1.0e-5f, "add_softplus_mul_fusion");
+}
+
+static void run_silu_mul_fusion_case(ggml_backend_t backend, ggml_backend_dev_t dev, int64_t nelements) {
+    ggml_context_ptr ctx = make_context();
+    ggml_tensor * src = ggml_new_tensor_1d(ctx.get(), GGML_TYPE_F32, nelements);
+    ggml_tensor * rhs = ggml_new_tensor_1d(ctx.get(), GGML_TYPE_F32, nelements);
+    ggml_tensor * silu = ggml_silu(ctx.get(), src);
+    ggml_tensor * out = ggml_mul(ctx.get(), silu, rhs);
+    GGML_ASSERT(ggml_backend_dev_supports_op(dev, out));
+
+    ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 16, false);
+    ggml_build_forward_expand(graph, out);
+    ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
+    GGML_ASSERT(buffer != nullptr);
+
+    std::vector<float> src_data(static_cast<size_t>(nelements));
+    std::vector<float> rhs_data(static_cast<size_t>(nelements));
+    std::vector<float> expected(static_cast<size_t>(nelements));
+    for (int64_t i = 0; i < nelements; ++i) {
+        src_data[static_cast<size_t>(i)] = static_cast<float>((i * 7) % 23 - 11) * 0.125f;
+        rhs_data[static_cast<size_t>(i)] = static_cast<float>((i * 5) % 17 - 8) * 0.0625f;
+        const float sigmoid = 1.0f / (1.0f + std::exp(-src_data[static_cast<size_t>(i)]));
+        expected[static_cast<size_t>(i)] = src_data[static_cast<size_t>(i)] * sigmoid * rhs_data[static_cast<size_t>(i)];
+    }
+    ggml_backend_tensor_set(src, src_data.data(), 0, src_data.size() * sizeof(float));
+    ggml_backend_tensor_set(rhs, rhs_data.data(), 0, rhs_data.size() * sizeof(float));
+    scoped_env_var disable_silu("GGML_HRX_DISABLE_SILU", "1");
+    scoped_env_var disable_mul("GGML_HRX_DISABLE_MUL", "1");
+    GGML_ASSERT(ggml_backend_graph_compute(backend, graph) == GGML_STATUS_SUCCESS);
+    expect_near(tensor_to_float(out), expected, 1.0e-5f, "silu_mul_fusion");
+}
+
 static void run_rms_norm_mul_rope_fusion_case(ggml_backend_t backend, const char * label) {
     static constexpr int64_t NCOLS = 128;
     static constexpr int64_t NE1 = 3;
@@ -3580,6 +3755,7 @@ int main() {
         run_rms_norm_case(backend.get(), 513, 2, 2);
         run_rms_norm_mul_fusion_case(backend.get(), 64, 3, 2, 1, 1, "rms_norm_mul_fusion_broadcast");
         run_rms_norm_mul_fusion_case(backend.get(), 257, 2, 2, 2, 1, "rms_norm_mul_fusion_rows");
+        run_add_rms_norm_mul_fusion_case(backend.get(), dev, "add_rms_norm_mul_fusion");
         run_rms_norm_mul_rope_fusion_case(backend.get(), "rms_norm_mul_rope_fusion");
         run_rope_set_rows_fusion_case(backend.get(), false, "rope_set_rows_fusion");
         run_rope_set_rows_fusion_case(backend.get(), true, "rms_norm_mul_rope_set_rows_fusion");
@@ -3598,6 +3774,10 @@ int main() {
         run_unary_case(backend.get(), GGML_UNARY_OP_SIGMOID, 257);
         run_unary_case(backend.get(), GGML_UNARY_OP_SOFTPLUS, 257);
         run_swiglu_case(backend.get(), 257);
+        run_silu_mul_fusion_case(backend.get(), dev, 257);
+        run_add_add_fusion_case(backend.get(), dev, 1, 1);
+        run_add_add_fusion_case(backend.get(), dev, 257, 3);
+        run_add_softplus_mul_fusion_case(backend.get(), dev);
         run_sigmoid_mul_add_add_fusion_case(backend.get(), dev);
         run_sigmoid_mul_strided_fusion_case(backend.get(), dev);
         run_sigmoid_mul_strided_negative_intervening_op_case(backend.get());

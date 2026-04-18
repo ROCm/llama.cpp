@@ -71,6 +71,22 @@ KERNELS = [
         "workgroup_size": (256, 1, 1),
     },
     {
+        "name": "hrx_add_add_f32_broadcast",
+        "source": "add_add_f32_broadcast.hip.cpp",
+        "format": None,
+        "binding_count": 4,
+        "constants_size": 144,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_add_rms_norm_mul_f32_broadcast",
+        "source": "add_rms_norm_mul_f32_broadcast.hip.cpp",
+        "format": None,
+        "binding_count": 5,
+        "constants_size": 200,
+        "workgroup_size": (512, 1, 1),
+    },
+    {
         "name": "hrx_mul_f32_broadcast",
         "source": "mul_f32_broadcast.hip.cpp",
         "format": None,
@@ -108,6 +124,14 @@ KERNELS = [
         "format": None,
         "binding_count": 5,
         "constants_size": 176,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
+        "name": "hrx_add_softplus_mul_f32_broadcast",
+        "source": "add_softplus_mul_f32_broadcast.hip.cpp",
+        "format": None,
+        "binding_count": 4,
+        "constants_size": 144,
         "workgroup_size": (256, 1, 1),
     },
     {

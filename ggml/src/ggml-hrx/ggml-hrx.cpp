@@ -125,6 +125,37 @@ struct ggml_backend_hrx_rms_norm_mul_constants {
 
 static_assert(sizeof(ggml_backend_hrx_rms_norm_mul_constants) == 144);
 
+struct ggml_backend_hrx_add_rms_norm_mul_broadcast_constants {
+    int64_t ncols;
+    int64_t nrows;
+    int64_t ne1;
+    int64_t ne2;
+    int64_t src1_ne0;
+    int64_t src0_nb1;
+    int64_t src0_nb2;
+    int64_t src0_nb3;
+    int64_t src1_nb1;
+    int64_t src1_nb2;
+    int64_t src1_nb3;
+    int64_t weight_ne0;
+    int64_t weight_ne1;
+    int64_t weight_ne2;
+    int64_t weight_ne3;
+    int64_t weight_nb1;
+    int64_t weight_nb2;
+    int64_t weight_nb3;
+    int64_t add_dst_nb1;
+    int64_t add_dst_nb2;
+    int64_t add_dst_nb3;
+    int64_t dst_nb1;
+    int64_t dst_nb2;
+    int64_t dst_nb3;
+    float eps;
+    int32_t _pad;
+};
+
+static_assert(sizeof(ggml_backend_hrx_add_rms_norm_mul_broadcast_constants) == 200);
+
 struct ggml_backend_hrx_rms_norm_mul_rope_constants {
     int64_t ncols;
     int64_t nrows;
@@ -292,6 +323,52 @@ struct ggml_backend_hrx_mul_add_add_broadcast_constants {
 };
 
 static_assert(sizeof(ggml_backend_hrx_mul_add_add_broadcast_constants) == 176);
+
+struct ggml_backend_hrx_add_add_broadcast_constants {
+    int64_t ne0;
+    int64_t nrows;
+    int64_t ne1;
+    int64_t ne2;
+    int64_t src1_ne0;
+    int64_t src2_ne0;
+    int64_t src0_nb1;
+    int64_t src0_nb2;
+    int64_t src0_nb3;
+    int64_t src1_nb1;
+    int64_t src1_nb2;
+    int64_t src1_nb3;
+    int64_t src2_nb1;
+    int64_t src2_nb2;
+    int64_t src2_nb3;
+    int64_t dst_nb1;
+    int64_t dst_nb2;
+    int64_t dst_nb3;
+};
+
+static_assert(sizeof(ggml_backend_hrx_add_add_broadcast_constants) == 144);
+
+struct ggml_backend_hrx_add_softplus_mul_broadcast_constants {
+    int64_t ne0;
+    int64_t nrows;
+    int64_t ne1;
+    int64_t ne2;
+    int64_t add_src1_ne0;
+    int64_t mul_src_ne0;
+    int64_t src0_nb1;
+    int64_t src0_nb2;
+    int64_t src0_nb3;
+    int64_t add_src1_nb1;
+    int64_t add_src1_nb2;
+    int64_t add_src1_nb3;
+    int64_t mul_src_nb1;
+    int64_t mul_src_nb2;
+    int64_t mul_src_nb3;
+    int64_t dst_nb1;
+    int64_t dst_nb2;
+    int64_t dst_nb3;
+};
+
+static_assert(sizeof(ggml_backend_hrx_add_softplus_mul_broadcast_constants) == 144);
 
 struct ggml_backend_hrx_scale_constants {
     int64_t n;
@@ -856,14 +933,17 @@ struct ggml_backend_hrx_device_context {
     ggml_backend_hrx_op_provider rms_norm_mul_wg128_provider;
     ggml_backend_hrx_op_provider rms_norm_mul_rope_f32_provider;
     ggml_backend_hrx_op_provider rms_norm_mul_rope_set_rows_f32_f16_provider;
+    ggml_backend_hrx_op_provider add_rms_norm_mul_broadcast_provider;
     ggml_backend_hrx_op_provider add_provider;
     ggml_backend_hrx_op_provider mul_provider;
     ggml_backend_hrx_op_provider add_broadcast_provider;
     ggml_backend_hrx_op_provider mul_broadcast_provider;
     ggml_backend_hrx_op_provider div_broadcast_provider;
     ggml_backend_hrx_op_provider add8_provider;
+    ggml_backend_hrx_op_provider add_add_broadcast_provider;
     ggml_backend_hrx_op_provider mul_sum8_provider;
     ggml_backend_hrx_op_provider mul_add_add_broadcast_provider;
+    ggml_backend_hrx_op_provider add_softplus_mul_broadcast_provider;
     ggml_backend_hrx_op_provider sigmoid_mul_add_add_broadcast_provider;
     ggml_backend_hrx_op_provider scale_provider;
     ggml_backend_hrx_op_provider set_rows_f32_provider;
@@ -1000,14 +1080,17 @@ static void ggml_backend_hrx_reset_providers(ggml_backend_hrx_device_context * d
     device_context->rms_norm_mul_wg128_provider.reset();
     device_context->rms_norm_mul_rope_f32_provider.reset();
     device_context->rms_norm_mul_rope_set_rows_f32_f16_provider.reset();
+    device_context->add_rms_norm_mul_broadcast_provider.reset();
     device_context->add_provider.reset();
     device_context->mul_provider.reset();
     device_context->add_broadcast_provider.reset();
     device_context->mul_broadcast_provider.reset();
     device_context->div_broadcast_provider.reset();
     device_context->add8_provider.reset();
+    device_context->add_add_broadcast_provider.reset();
     device_context->mul_sum8_provider.reset();
     device_context->mul_add_add_broadcast_provider.reset();
+    device_context->add_softplus_mul_broadcast_provider.reset();
     device_context->sigmoid_mul_add_add_broadcast_provider.reset();
     device_context->scale_provider.reset();
     device_context->set_rows_f32_provider.reset();
@@ -2176,6 +2259,19 @@ static bool ggml_backend_hrx_load_add_broadcast_provider(ggml_backend_hrx_device
     return ggml_backend_hrx_load_catalog_provider(device_context, "hrx_add_f32_broadcast", &device_context->add_broadcast_provider);
 }
 
+static bool ggml_backend_hrx_load_add_add_broadcast_provider(ggml_backend_hrx_device_context * device_context) {
+    return ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_add_add_f32_broadcast", &device_context->add_add_broadcast_provider);
+}
+
+static bool ggml_backend_hrx_load_add_rms_norm_mul_broadcast_provider(
+        ggml_backend_hrx_device_context * device_context) {
+    return ggml_backend_hrx_load_catalog_provider(
+        device_context,
+        "hrx_add_rms_norm_mul_f32_broadcast",
+        &device_context->add_rms_norm_mul_broadcast_provider);
+}
+
 static bool ggml_backend_hrx_load_mul_broadcast_provider(ggml_backend_hrx_device_context * device_context) {
     return ggml_backend_hrx_load_catalog_provider(device_context, "hrx_mul_f32_broadcast", &device_context->mul_broadcast_provider);
 }
@@ -2195,6 +2291,14 @@ static bool ggml_backend_hrx_load_mul_sum8_provider(ggml_backend_hrx_device_cont
 static bool ggml_backend_hrx_load_mul_add_add_broadcast_provider(ggml_backend_hrx_device_context * device_context) {
     return ggml_backend_hrx_load_catalog_provider(
         device_context, "hrx_mul_add_add_f32_broadcast", &device_context->mul_add_add_broadcast_provider);
+}
+
+static bool ggml_backend_hrx_load_add_softplus_mul_broadcast_provider(
+        ggml_backend_hrx_device_context * device_context) {
+    return ggml_backend_hrx_load_catalog_provider(
+        device_context,
+        "hrx_add_softplus_mul_f32_broadcast",
+        &device_context->add_softplus_mul_broadcast_provider);
 }
 
 static bool ggml_backend_hrx_load_sigmoid_mul_add_add_broadcast_provider(
@@ -2960,6 +3064,61 @@ static bool ggml_backend_hrx_supports_broadcast_operand_f32(
            (src->ne[0] == 1 || src->nb[0] == sizeof(float));
 }
 
+static bool ggml_backend_hrx_supports_add_add_broadcast(
+        const ggml_backend_hrx_device_context * device_context,
+        const ggml_tensor * first,
+        const ggml_tensor * second) {
+    if (ggml_backend_hrx_approximate_kernels_disabled() ||
+        ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_ADD_ADD_FUSION") ||
+        device_context->add_add_broadcast_provider.kind != ggml_backend_hrx_provider_kind::hsaco ||
+        !ggml_backend_hrx_supports_broadcast_elementwise(device_context->add_broadcast_provider, first) ||
+        !second ||
+        second->op != GGML_OP_ADD ||
+        second->type != GGML_TYPE_F32 ||
+        (second->src[0] != first && second->src[1] != first) ||
+        !ggml_are_same_shape(first, second) ||
+        second->nb[0] != sizeof(float)) {
+        return false;
+    }
+
+    const ggml_tensor * src2 = second->src[0] == first ? second->src[1] : second->src[0];
+    return ggml_backend_hrx_supports_broadcast_operand_f32(src2, first);
+}
+
+static bool ggml_backend_hrx_supports_add_softplus_mul_broadcast(
+        const ggml_backend_hrx_device_context * device_context,
+        const ggml_tensor * add,
+        const ggml_tensor * softplus,
+        const ggml_tensor * mul,
+        const ggml_tensor ** mul_src) {
+    if (ggml_backend_hrx_approximate_kernels_disabled() ||
+        ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_ADD_SOFTPLUS_MUL_FUSION") ||
+        device_context->add_softplus_mul_broadcast_provider.kind != ggml_backend_hrx_provider_kind::hsaco ||
+        !ggml_backend_hrx_supports_broadcast_elementwise(device_context->add_broadcast_provider, add) ||
+        !softplus ||
+        softplus->op != GGML_OP_UNARY ||
+        ggml_get_unary_op(softplus) != GGML_UNARY_OP_SOFTPLUS ||
+        softplus->src[0] != add ||
+        softplus->type != GGML_TYPE_F32 ||
+        !ggml_are_same_shape(add, softplus) ||
+        softplus->nb[0] != sizeof(float) ||
+        !mul ||
+        mul->op != GGML_OP_MUL ||
+        mul->type != GGML_TYPE_F32 ||
+        (mul->src[0] != softplus && mul->src[1] != softplus) ||
+        !ggml_are_same_shape(add, mul) ||
+        mul->nb[0] != sizeof(float)) {
+        return false;
+    }
+
+    const ggml_tensor * other = mul->src[0] == softplus ? mul->src[1] : mul->src[0];
+    if (!ggml_backend_hrx_supports_broadcast_operand_f32(other, add)) {
+        return false;
+    }
+    *mul_src = other;
+    return true;
+}
+
 static bool ggml_backend_hrx_supports_mul_add_add_broadcast(
         const ggml_backend_hrx_device_context * device_context,
         const ggml_tensor * mul,
@@ -3045,6 +3204,22 @@ static bool ggml_backend_hrx_supports_sigmoid_mul_add_add_broadcast(
 
     *mul_src = other;
     return true;
+}
+
+static bool ggml_backend_hrx_supports_add_rms_norm_mul_broadcast(
+        const ggml_backend_hrx_device_context * device_context,
+        const ggml_tensor * add,
+        const ggml_tensor * rms_norm,
+        const ggml_tensor * mul) {
+    return !ggml_backend_hrx_approximate_kernels_disabled() &&
+           !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_ADD_RMS_NORM_MUL_FUSION") &&
+           device_context->add_rms_norm_mul_broadcast_provider.kind == ggml_backend_hrx_provider_kind::hsaco &&
+           add &&
+           rms_norm &&
+           rms_norm->op == GGML_OP_RMS_NORM &&
+           rms_norm->src[0] == add &&
+           ggml_backend_hrx_supports_broadcast_elementwise(device_context->add_broadcast_provider, add) &&
+           ggml_backend_hrx_supports_rms_norm_mul(device_context, rms_norm, mul);
 }
 
 static bool ggml_backend_hrx_supports_add8_tensor(
@@ -3286,8 +3461,12 @@ static bool ggml_backend_hrx_supports_unary_f32(
     const ggml_tensor * src0 = op->src[0];
     const ggml_backend_hrx_op_provider * provider = ggml_backend_hrx_unary_provider(device_context, op);
     return provider &&
+           (ggml_get_unary_op(op) != GGML_UNARY_OP_SILU ||
+            !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_SILU")) &&
            (ggml_get_unary_op(op) != GGML_UNARY_OP_SIGMOID ||
             !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_SIGMOID")) &&
+           (ggml_get_unary_op(op) != GGML_UNARY_OP_SOFTPLUS ||
+            !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_SOFTPLUS")) &&
            provider->kind == ggml_backend_hrx_provider_kind::hsaco &&
            src0 &&
            src0->type == GGML_TYPE_F32 &&
@@ -3355,6 +3534,35 @@ static bool ggml_backend_hrx_supports_swiglu_f32(
            ggml_is_contiguous(src0) &&
            ggml_is_contiguous(src1) &&
            ggml_is_contiguous(op);
+}
+
+static bool ggml_backend_hrx_supports_silu_mul_f32(
+        const ggml_backend_hrx_device_context * device_context,
+        const ggml_tensor * silu,
+        const ggml_tensor * mul) {
+    if (ggml_backend_hrx_approximate_kernels_disabled() ||
+        ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_SILU_MUL_FUSION") ||
+        device_context->swiglu_provider.kind != ggml_backend_hrx_provider_kind::hsaco ||
+        !silu || !mul ||
+        silu->op != GGML_OP_UNARY ||
+        ggml_get_unary_op(silu) != GGML_UNARY_OP_SILU ||
+        mul->op != GGML_OP_MUL ||
+        mul->type != GGML_TYPE_F32 ||
+        silu->type != GGML_TYPE_F32 ||
+        !silu->src[0] ||
+        silu->src[0]->type != GGML_TYPE_F32) {
+        return false;
+    }
+
+    const ggml_tensor * other = mul->src[0] == silu ? mul->src[1] :
+        (mul->src[1] == silu ? mul->src[0] : nullptr);
+    return other &&
+           other->type == GGML_TYPE_F32 &&
+           ggml_are_same_shape(silu, other) &&
+           ggml_are_same_shape(silu, mul) &&
+           ggml_is_contiguous(silu->src[0]) &&
+           ggml_is_contiguous(other) &&
+           ggml_is_contiguous(mul);
 }
 
 static bool ggml_backend_hrx_supports_sum_rows(
@@ -5393,6 +5601,136 @@ static ggml_status ggml_backend_hrx_dispatch_sigmoid_mul_add_add_broadcast_f32(
     return GGML_STATUS_SUCCESS;
 }
 
+static ggml_status ggml_backend_hrx_dispatch_add_add_broadcast_f32(
+        ggml_backend_hrx_context * context,
+        const ggml_tensor * first,
+        const ggml_tensor * second) {
+    const ggml_tensor * src0 = first->src[0];
+    const ggml_tensor * src1 = first->src[1];
+    const ggml_tensor * src2 = second->src[0] == first ? second->src[1] : second->src[0];
+    hrx_buffer_ref_t bindings[4] = {};
+    if (!ggml_backend_hrx_tensor_buffer_ref(src0, &bindings[0]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(src1, &bindings[1]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(src2, &bindings[2]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(second, &bindings[3])) {
+        GGML_LOG_ERROR("%s: fused ADD_ADD tensor is not backed by a HRX buffer\n", __func__);
+        return GGML_STATUS_FAILED;
+    }
+
+    ggml_backend_hrx_add_add_broadcast_constants constants = {
+        /* .ne0      = */ second->ne[0],
+        /* .nrows    = */ ggml_nrows(second),
+        /* .ne1      = */ second->ne[1],
+        /* .ne2      = */ second->ne[2],
+        /* .src1_ne0 = */ src1->ne[0],
+        /* .src2_ne0 = */ src2->ne[0],
+        /* .src0_nb1 = */ static_cast<int64_t>(src0->nb[1]),
+        /* .src0_nb2 = */ static_cast<int64_t>(src0->nb[2]),
+        /* .src0_nb3 = */ static_cast<int64_t>(src0->nb[3]),
+        /* .src1_nb1 = */ src1->ne[1] == 1 ? 0 : static_cast<int64_t>(src1->nb[1]),
+        /* .src1_nb2 = */ src1->ne[2] == 1 ? 0 : static_cast<int64_t>(src1->nb[2]),
+        /* .src1_nb3 = */ src1->ne[3] == 1 ? 0 : static_cast<int64_t>(src1->nb[3]),
+        /* .src2_nb1 = */ src2->ne[1] == 1 ? 0 : static_cast<int64_t>(src2->nb[1]),
+        /* .src2_nb2 = */ src2->ne[2] == 1 ? 0 : static_cast<int64_t>(src2->nb[2]),
+        /* .src2_nb3 = */ src2->ne[3] == 1 ? 0 : static_cast<int64_t>(src2->nb[3]),
+        /* .dst_nb1  = */ static_cast<int64_t>(second->nb[1]),
+        /* .dst_nb2  = */ static_cast<int64_t>(second->nb[2]),
+        /* .dst_nb3  = */ static_cast<int64_t>(second->nb[3]),
+    };
+
+    const auto & provider = context->device_context->add_add_broadcast_provider;
+    const uint32_t workgroup_size = provider.export_info.workgroup_size[0] ?
+        provider.export_info.workgroup_size[0] : 256;
+    hrx_dispatch_config_t config = {
+        /* .workgroup_count = */ {
+            static_cast<uint32_t>((constants.ne0 + workgroup_size - 1) / workgroup_size),
+            static_cast<uint32_t>(constants.nrows),
+            1,
+        },
+        /* .workgroup_size = */ { workgroup_size, 1, 1 },
+        /* .subgroup_size = */ 0,
+    };
+
+    if (!GGML_HRX_CHECK(hrx_stream_dispatch(
+            context->stream,
+            provider.executable,
+            provider.export_ordinal,
+            &config,
+            &constants,
+            sizeof(constants),
+            bindings,
+            4,
+            HRX_DISPATCH_FLAG_NONE))) {
+        return GGML_STATUS_FAILED;
+    }
+    return GGML_STATUS_SUCCESS;
+}
+
+static ggml_status ggml_backend_hrx_dispatch_add_softplus_mul_broadcast_f32(
+        ggml_backend_hrx_context * context,
+        const ggml_tensor * add,
+        const ggml_tensor * mul,
+        const ggml_tensor * mul_src) {
+    const ggml_tensor * src0 = add->src[0];
+    const ggml_tensor * add_src1 = add->src[1];
+    hrx_buffer_ref_t bindings[4] = {};
+    if (!ggml_backend_hrx_tensor_buffer_ref(src0, &bindings[0]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(add_src1, &bindings[1]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(mul_src, &bindings[2]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(mul, &bindings[3])) {
+        GGML_LOG_ERROR("%s: fused ADD_SOFTPLUS_MUL tensor is not backed by a HRX buffer\n", __func__);
+        return GGML_STATUS_FAILED;
+    }
+
+    ggml_backend_hrx_add_softplus_mul_broadcast_constants constants = {
+        /* .ne0          = */ mul->ne[0],
+        /* .nrows        = */ ggml_nrows(mul),
+        /* .ne1          = */ mul->ne[1],
+        /* .ne2          = */ mul->ne[2],
+        /* .add_src1_ne0 = */ add_src1->ne[0],
+        /* .mul_src_ne0  = */ mul_src->ne[0],
+        /* .src0_nb1     = */ static_cast<int64_t>(src0->nb[1]),
+        /* .src0_nb2     = */ static_cast<int64_t>(src0->nb[2]),
+        /* .src0_nb3     = */ static_cast<int64_t>(src0->nb[3]),
+        /* .add_src1_nb1 = */ add_src1->ne[1] == 1 ? 0 : static_cast<int64_t>(add_src1->nb[1]),
+        /* .add_src1_nb2 = */ add_src1->ne[2] == 1 ? 0 : static_cast<int64_t>(add_src1->nb[2]),
+        /* .add_src1_nb3 = */ add_src1->ne[3] == 1 ? 0 : static_cast<int64_t>(add_src1->nb[3]),
+        /* .mul_src_nb1  = */ mul_src->ne[1] == 1 ? 0 : static_cast<int64_t>(mul_src->nb[1]),
+        /* .mul_src_nb2  = */ mul_src->ne[2] == 1 ? 0 : static_cast<int64_t>(mul_src->nb[2]),
+        /* .mul_src_nb3  = */ mul_src->ne[3] == 1 ? 0 : static_cast<int64_t>(mul_src->nb[3]),
+        /* .dst_nb1      = */ static_cast<int64_t>(mul->nb[1]),
+        /* .dst_nb2      = */ static_cast<int64_t>(mul->nb[2]),
+        /* .dst_nb3      = */ static_cast<int64_t>(mul->nb[3]),
+    };
+
+    const auto & provider = context->device_context->add_softplus_mul_broadcast_provider;
+    const uint32_t workgroup_size = provider.export_info.workgroup_size[0] ?
+        provider.export_info.workgroup_size[0] : 256;
+    hrx_dispatch_config_t config = {
+        /* .workgroup_count = */ {
+            static_cast<uint32_t>((constants.ne0 + workgroup_size - 1) / workgroup_size),
+            static_cast<uint32_t>(constants.nrows),
+            1,
+        },
+        /* .workgroup_size = */ { workgroup_size, 1, 1 },
+        /* .subgroup_size = */ 0,
+    };
+
+    if (!GGML_HRX_CHECK(hrx_stream_dispatch(
+            context->stream,
+            provider.executable,
+            provider.export_ordinal,
+            &config,
+            &constants,
+            sizeof(constants),
+            bindings,
+            4,
+            HRX_DISPATCH_FLAG_NONE))) {
+        return GGML_STATUS_FAILED;
+    }
+    return GGML_STATUS_SUCCESS;
+}
+
 static ggml_status ggml_backend_hrx_dispatch_add8_f32(
         ggml_backend_hrx_context * context,
         const std::array<const ggml_tensor *, 8> & sources,
@@ -5643,6 +5981,49 @@ static ggml_status ggml_backend_hrx_dispatch_swiglu_f32(
     return GGML_STATUS_SUCCESS;
 }
 
+static ggml_status ggml_backend_hrx_dispatch_silu_mul_f32(
+        ggml_backend_hrx_context * context,
+        const ggml_tensor * silu,
+        const ggml_tensor * mul) {
+    const ggml_tensor * src0 = silu->src[0];
+    const ggml_tensor * src1 = mul->src[0] == silu ? mul->src[1] : mul->src[0];
+    hrx_buffer_ref_t bindings[3] = {};
+    if (!ggml_backend_hrx_tensor_buffer_ref(src0, &bindings[0]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(src1, &bindings[1]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(mul, &bindings[2])) {
+        GGML_LOG_ERROR("%s: SILU_MUL tensor is not backed by a HRX buffer\n", __func__);
+        return GGML_STATUS_FAILED;
+    }
+
+    const int64_t n = ggml_nelements(mul);
+    const auto & provider = context->device_context->swiglu_provider;
+    const uint32_t workgroup_size = provider.export_info.workgroup_size[0] ?
+        provider.export_info.workgroup_size[0] : 256;
+    hrx_dispatch_config_t config = {
+        /* .workgroup_count = */ {
+            static_cast<uint32_t>((n + workgroup_size - 1) / workgroup_size),
+            1,
+            1,
+        },
+        /* .workgroup_size = */ { workgroup_size, 1, 1 },
+        /* .subgroup_size = */ 0,
+    };
+
+    if (!GGML_HRX_CHECK(hrx_stream_dispatch(
+            context->stream,
+            provider.executable,
+            provider.export_ordinal,
+            &config,
+            &n,
+            sizeof(n),
+            bindings,
+            3,
+            HRX_DISPATCH_FLAG_NONE))) {
+        return GGML_STATUS_FAILED;
+    }
+    return GGML_STATUS_SUCCESS;
+}
+
 static ggml_status ggml_backend_hrx_dispatch_rms_norm(
         ggml_backend_hrx_context * context,
         const ggml_tensor * dst) {
@@ -5757,6 +6138,80 @@ static ggml_status ggml_backend_hrx_dispatch_rms_norm_mul(
             sizeof(constants),
             bindings,
             3,
+            HRX_DISPATCH_FLAG_NONE))) {
+        return GGML_STATUS_FAILED;
+    }
+    return GGML_STATUS_SUCCESS;
+}
+
+static ggml_status ggml_backend_hrx_dispatch_add_rms_norm_mul_broadcast(
+        ggml_backend_hrx_context * context,
+        const ggml_tensor * add,
+        const ggml_tensor * rms_norm,
+        const ggml_tensor * mul) {
+    const ggml_tensor * src0 = add->src[0];
+    const ggml_tensor * src1 = add->src[1];
+    const ggml_tensor * weight = mul->src[0] == rms_norm ? mul->src[1] : mul->src[0];
+    hrx_buffer_ref_t bindings[5] = {};
+    if (!ggml_backend_hrx_tensor_buffer_ref(src0, &bindings[0]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(src1, &bindings[1]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(add, &bindings[2]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(weight, &bindings[3]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(mul, &bindings[4])) {
+        GGML_LOG_ERROR("%s: ADD_RMS_NORM_MUL tensor is not backed by a HRX buffer\n", __func__);
+        return GGML_STATUS_FAILED;
+    }
+
+    float eps = 0.0f;
+    std::memcpy(&eps, rms_norm->op_params, sizeof(eps));
+
+    ggml_backend_hrx_add_rms_norm_mul_broadcast_constants constants = {
+        /* .ncols       = */ add->ne[0],
+        /* .nrows       = */ ggml_nrows(add),
+        /* .ne1         = */ add->ne[1],
+        /* .ne2         = */ add->ne[2],
+        /* .src1_ne0    = */ src1->ne[0],
+        /* .src0_nb1    = */ static_cast<int64_t>(src0->nb[1]),
+        /* .src0_nb2    = */ static_cast<int64_t>(src0->nb[2]),
+        /* .src0_nb3    = */ static_cast<int64_t>(src0->nb[3]),
+        /* .src1_nb1    = */ src1->ne[1] == 1 ? 0 : static_cast<int64_t>(src1->nb[1]),
+        /* .src1_nb2    = */ src1->ne[2] == 1 ? 0 : static_cast<int64_t>(src1->nb[2]),
+        /* .src1_nb3    = */ src1->ne[3] == 1 ? 0 : static_cast<int64_t>(src1->nb[3]),
+        /* .weight_ne0  = */ weight->ne[0],
+        /* .weight_ne1  = */ weight->ne[1],
+        /* .weight_ne2  = */ weight->ne[2],
+        /* .weight_ne3  = */ weight->ne[3],
+        /* .weight_nb1  = */ static_cast<int64_t>(weight->nb[1]),
+        /* .weight_nb2  = */ static_cast<int64_t>(weight->nb[2]),
+        /* .weight_nb3  = */ static_cast<int64_t>(weight->nb[3]),
+        /* .add_dst_nb1 = */ static_cast<int64_t>(add->nb[1]),
+        /* .add_dst_nb2 = */ static_cast<int64_t>(add->nb[2]),
+        /* .add_dst_nb3 = */ static_cast<int64_t>(add->nb[3]),
+        /* .dst_nb1     = */ static_cast<int64_t>(mul->nb[1]),
+        /* .dst_nb2     = */ static_cast<int64_t>(mul->nb[2]),
+        /* .dst_nb3     = */ static_cast<int64_t>(mul->nb[3]),
+        /* .eps         = */ eps,
+        /* ._pad        = */ 0,
+    };
+
+    const auto & provider = context->device_context->add_rms_norm_mul_broadcast_provider;
+    const uint32_t workgroup_size = provider.export_info.workgroup_size[0] ?
+        provider.export_info.workgroup_size[0] : 512;
+    hrx_dispatch_config_t config = {
+        /* .workgroup_count = */ { static_cast<uint32_t>(constants.nrows), 1, 1 },
+        /* .workgroup_size = */ { workgroup_size, 1, 1 },
+        /* .subgroup_size = */ 0,
+    };
+
+    if (!GGML_HRX_CHECK(hrx_stream_dispatch(
+            context->stream,
+            provider.executable,
+            provider.export_ordinal,
+            &config,
+            &constants,
+            sizeof(constants),
+            bindings,
+            5,
             HRX_DISPATCH_FLAG_NONE))) {
         return GGML_STATUS_FAILED;
     }
@@ -8575,6 +9030,56 @@ static ggml_status ggml_backend_hrx_graph_compute(ggml_backend_t backend, ggml_c
             i++;
             continue;
         }
+        if (node->op == GGML_OP_UNARY &&
+            !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_FUSION") &&
+            !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_SILU_MUL_FUSION") &&
+            i + 1 < cgraph->n_nodes &&
+            cgraph->nodes[i + 1]->op == GGML_OP_MUL &&
+            ggml_backend_hrx_supports_silu_mul_f32(context->device_context, node, cgraph->nodes[i + 1]) &&
+            ggml_can_fuse_subgraph(cgraph, i, { GGML_OP_UNARY, GGML_OP_MUL }, { i + 1 })) {
+            if (ggml_backend_hrx_dispatch_silu_mul_f32(context, node, cgraph->nodes[i + 1]) !=
+                GGML_STATUS_SUCCESS) {
+                return GGML_STATUS_FAILED;
+            }
+            i++;
+            continue;
+        }
+        if (node->op == GGML_OP_ADD &&
+            !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_FUSION") &&
+            !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_ADD_RMS_NORM_MUL_FUSION") &&
+            i + 2 < cgraph->n_nodes &&
+            cgraph->nodes[i + 1]->op == GGML_OP_RMS_NORM &&
+            cgraph->nodes[i + 2]->op == GGML_OP_MUL &&
+            ggml_backend_hrx_supports_add_rms_norm_mul_broadcast(
+                context->device_context, node, cgraph->nodes[i + 1], cgraph->nodes[i + 2]) &&
+            ggml_can_fuse_subgraph(
+                cgraph, i, { GGML_OP_ADD, GGML_OP_RMS_NORM, GGML_OP_MUL }, { i, i + 2 })) {
+            if (ggml_backend_hrx_dispatch_add_rms_norm_mul_broadcast(
+                    context, node, cgraph->nodes[i + 1], cgraph->nodes[i + 2]) != GGML_STATUS_SUCCESS) {
+                return GGML_STATUS_FAILED;
+            }
+            i += 2;
+            continue;
+        }
+        if (node->op == GGML_OP_ADD &&
+            !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_FUSION") &&
+            !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_ADD_SOFTPLUS_MUL_FUSION") &&
+            i + 2 < cgraph->n_nodes &&
+            cgraph->nodes[i + 1]->op == GGML_OP_UNARY &&
+            cgraph->nodes[i + 2]->op == GGML_OP_MUL) {
+            const ggml_tensor * mul_src = nullptr;
+            if (ggml_backend_hrx_supports_add_softplus_mul_broadcast(
+                    context->device_context, node, cgraph->nodes[i + 1], cgraph->nodes[i + 2], &mul_src) &&
+                ggml_can_fuse_subgraph(
+                    cgraph, i, { GGML_OP_ADD, GGML_OP_UNARY, GGML_OP_MUL }, { i + 2 })) {
+                if (ggml_backend_hrx_dispatch_add_softplus_mul_broadcast_f32(
+                        context, node, cgraph->nodes[i + 2], mul_src) != GGML_STATUS_SUCCESS) {
+                    return GGML_STATUS_FAILED;
+                }
+                i += 2;
+                continue;
+            }
+        }
         if (node->op == GGML_OP_MUL_MAT &&
             !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_FUSION") &&
             !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_MUL_MAT_SWIGLU_FUSION") &&
@@ -8725,6 +9230,20 @@ static ggml_status ggml_backend_hrx_graph_compute(ggml_backend_t backend, ggml_c
                 i += 6;
                 continue;
             }
+        }
+        if (node->op == GGML_OP_ADD &&
+            !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_FUSION") &&
+            !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_ADD_ADD_FUSION") &&
+            i + 1 < cgraph->n_nodes &&
+            cgraph->nodes[i + 1]->op == GGML_OP_ADD &&
+            ggml_backend_hrx_supports_add_add_broadcast(context->device_context, node, cgraph->nodes[i + 1]) &&
+            ggml_can_fuse_subgraph(cgraph, i, { GGML_OP_ADD, GGML_OP_ADD }, { i + 1 })) {
+            if (ggml_backend_hrx_dispatch_add_add_broadcast_f32(context, node, cgraph->nodes[i + 1]) !=
+                GGML_STATUS_SUCCESS) {
+                return GGML_STATUS_FAILED;
+            }
+            i++;
+            continue;
         }
         if (node->op == GGML_OP_ROPE &&
             !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_FUSION") &&
@@ -9378,14 +9897,17 @@ static std::unique_ptr<ggml_backend_hrx_reg_context> ggml_backend_hrx_create_reg
         ggml_backend_hrx_register_stream(device_context.get(), device_context->transfer_stream);
         (void) ggml_backend_hrx_load_rms_norm_provider(device_context.get());
         (void) ggml_backend_hrx_load_rms_norm_mul_providers(device_context.get());
+        (void) ggml_backend_hrx_load_add_rms_norm_mul_broadcast_provider(device_context.get());
         (void) ggml_backend_hrx_load_add_provider(device_context.get());
         (void) ggml_backend_hrx_load_mul_provider(device_context.get());
         (void) ggml_backend_hrx_load_add_broadcast_provider(device_context.get());
         (void) ggml_backend_hrx_load_mul_broadcast_provider(device_context.get());
         (void) ggml_backend_hrx_load_div_broadcast_provider(device_context.get());
         (void) ggml_backend_hrx_load_add8_provider(device_context.get());
+        (void) ggml_backend_hrx_load_add_add_broadcast_provider(device_context.get());
         (void) ggml_backend_hrx_load_mul_sum8_provider(device_context.get());
         (void) ggml_backend_hrx_load_mul_add_add_broadcast_provider(device_context.get());
+        (void) ggml_backend_hrx_load_add_softplus_mul_broadcast_provider(device_context.get());
         (void) ggml_backend_hrx_load_sigmoid_mul_add_add_broadcast_provider(device_context.get());
         (void) ggml_backend_hrx_load_scale_provider(device_context.get());
         (void) ggml_backend_hrx_load_set_rows_f32_provider(device_context.get());
