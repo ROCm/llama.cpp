@@ -391,6 +391,7 @@ struct ggml_backend_hrx_device_context {
     ggml_backend_hrx_op_provider get_rows_f32_provider;
     ggml_backend_hrx_op_provider get_rows_f32_nr1_provider;
     ggml_backend_hrx_op_provider get_rows_q5_k_provider;
+    ggml_backend_hrx_op_provider mul_mat_vec_bf16_provider;
     ggml_backend_hrx_op_provider mul_mat_vec_f16_provider;
     ggml_backend_hrx_op_provider mul_mat_vec_f32_provider;
     ggml_backend_hrx_op_provider mul_mat_vec_q4_k_provider;
@@ -439,6 +440,7 @@ static void ggml_backend_hrx_reset_providers(ggml_backend_hrx_device_context * d
     device_context->get_rows_f32_provider.reset();
     device_context->get_rows_f32_nr1_provider.reset();
     device_context->get_rows_q5_k_provider.reset();
+    device_context->mul_mat_vec_bf16_provider.reset();
     device_context->mul_mat_vec_f16_provider.reset();
     device_context->mul_mat_vec_f32_provider.reset();
     device_context->mul_mat_vec_q4_k_provider.reset();
@@ -1330,7 +1332,9 @@ static bool ggml_backend_hrx_load_get_rows_q5_k_provider(ggml_backend_hrx_device
 
 static bool ggml_backend_hrx_load_mul_mat_vec_providers(ggml_backend_hrx_device_context * device_context) {
     bool ok = ggml_backend_hrx_load_catalog_provider(
-        device_context, "hrx_mul_mat_vec_f16_f32", &device_context->mul_mat_vec_f16_provider);
+        device_context, "hrx_mul_mat_vec_bf16_f32", &device_context->mul_mat_vec_bf16_provider);
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_vec_f16_f32", &device_context->mul_mat_vec_f16_provider) || ok;
     ok = ggml_backend_hrx_load_catalog_provider(
         device_context, "hrx_mul_mat_vec_f32_f32", &device_context->mul_mat_vec_f32_provider) || ok;
     ok = ggml_backend_hrx_load_catalog_provider(
@@ -1931,6 +1935,8 @@ static const ggml_backend_hrx_op_provider * ggml_backend_hrx_mul_mat_vec_provide
         const ggml_backend_hrx_device_context * device_context,
         ggml_type type) {
     switch (type) {
+        case GGML_TYPE_BF16:
+            return &device_context->mul_mat_vec_bf16_provider;
         case GGML_TYPE_F16:
             return &device_context->mul_mat_vec_f16_provider;
         case GGML_TYPE_F32:

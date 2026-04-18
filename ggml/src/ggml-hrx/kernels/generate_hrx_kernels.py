@@ -232,6 +232,15 @@ KERNELS = [
         "workgroup_size": (256, 1, 1),
     },
     {
+        "name": "hrx_mul_mat_vec_bf16_f32",
+        "source": "mul_mat_vec_bf16.hip.cpp",
+        "format": None,
+        "binding_count": 3,
+        "parameter_count": 6,
+        "constants_size": 24,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
         "name": "hrx_mul_mat_vec_f16_f32",
         "source": "mul_mat_vec_f16.hip.cpp",
         "format": None,
