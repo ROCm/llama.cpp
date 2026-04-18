@@ -216,6 +216,14 @@ KERNELS = [
         "workgroup_size": (32, 16, 1),
     },
     {
+        "name": "hrx_ssm_conv_update_f32",
+        "source": "ssm_conv_update_f32.hip.cpp",
+        "format": None,
+        "binding_count": 5,
+        "constants_size": 112,
+        "workgroup_size": (256, 1, 1),
+    },
+    {
         "name": "hrx_gated_delta_net_f32",
         "source": "gated_delta_net_f32.hip.cpp",
         "format": None,

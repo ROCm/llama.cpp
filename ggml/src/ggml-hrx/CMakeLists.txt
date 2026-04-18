@@ -140,6 +140,7 @@ set(GGML_HRX_WAVE32_KERNEL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/set_rows_f32_q4_0.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/set_rows_f32_q8_0.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/soft_max_f32.hip.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/kernels/ssm_conv_update_f32.hip.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernels/unary_f32.hip.cpp")
 
 set(GGML_HRX_WAVE64_KERNEL_SOURCES

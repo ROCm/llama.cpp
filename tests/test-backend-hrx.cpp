@@ -1615,6 +1615,188 @@ private:
     std::string old_value;
 };
 
+static float ssm_conv_update_value(
+        const std::vector<float> & conv_state,
+        const std::vector<float> & input,
+        int64_t state_width,
+        int64_t n_tokens,
+        int64_t channel,
+        int64_t logical_pos) {
+    if (logical_pos < state_width) {
+        return conv_state[static_cast<size_t>(channel * state_width + logical_pos)];
+    }
+    return input[static_cast<size_t>(channel * n_tokens + logical_pos - state_width)];
+}
+
+static void run_ssm_conv_update_fusion_case(
+        ggml_backend_t backend,
+        int64_t d_conv,
+        int64_t d_inner,
+        int64_t n_tokens,
+        bool apply_silu,
+        bool strided_conv_state = false) {
+    ggml_context_ptr ctx = make_context();
+    const int64_t state_width = d_conv - 1;
+    ggml_tensor * conv_state_base = strided_conv_state ?
+        ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, d_inner, state_width) : nullptr;
+    ggml_tensor * conv_state = strided_conv_state ?
+        ggml_transpose(ctx.get(), conv_state_base) :
+        ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, state_width, d_inner);
+    if (strided_conv_state) {
+        GGML_ASSERT(conv_state->nb[0] != sizeof(float));
+    }
+    ggml_tensor * input = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, n_tokens, d_inner);
+    ggml_tensor * weight = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, d_conv, d_inner);
+    ggml_tensor * concat = ggml_concat(ctx.get(), conv_state, input, 0);
+    ggml_tensor * state_view = ggml_view_2d(
+        ctx.get(), concat, state_width, d_inner, concat->nb[1], static_cast<size_t>(n_tokens) * sizeof(float));
+    ggml_tensor * state_dst = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, state_width, d_inner);
+    ggml_tensor * state_update = ggml_cpy(ctx.get(), state_view, state_dst);
+    ggml_tensor * ssm = ggml_ssm_conv(ctx.get(), concat, weight);
+    ggml_tensor * out = apply_silu ? ggml_silu(ctx.get(), ssm) : ssm;
+
+    ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 32, false);
+    ggml_build_forward_expand(graph, state_update);
+    ggml_build_forward_expand(graph, out);
+
+    ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
+    GGML_ASSERT(buffer != nullptr);
+
+    std::vector<float> conv_state_data(static_cast<size_t>(state_width * d_inner));
+    std::vector<float> input_data(static_cast<size_t>(n_tokens * d_inner));
+    std::vector<float> weight_data(static_cast<size_t>(d_conv * d_inner));
+    for (size_t i = 0; i < conv_state_data.size(); ++i) {
+        conv_state_data[i] = static_cast<float>((i * 5) % 17) * 0.07f - 0.45f;
+    }
+    for (size_t i = 0; i < input_data.size(); ++i) {
+        input_data[i] = static_cast<float>((i * 7) % 23) * 0.05f - 0.5f;
+    }
+    for (size_t i = 0; i < weight_data.size(); ++i) {
+        weight_data[i] = static_cast<float>((i * 11) % 19) * 0.04f - 0.35f;
+    }
+    if (strided_conv_state) {
+        std::vector<float> conv_state_base_data(static_cast<size_t>(state_width * d_inner));
+        for (int64_t channel = 0; channel < d_inner; ++channel) {
+            for (int64_t i = 0; i < state_width; ++i) {
+                conv_state_base_data[static_cast<size_t>(i * d_inner + channel)] =
+                    conv_state_data[static_cast<size_t>(channel * state_width + i)];
+            }
+        }
+        ggml_backend_tensor_set(
+            conv_state_base, conv_state_base_data.data(), 0, conv_state_base_data.size() * sizeof(float));
+    } else {
+        ggml_backend_tensor_set(conv_state, conv_state_data.data(), 0, conv_state_data.size() * sizeof(float));
+    }
+    ggml_backend_tensor_set(input, input_data.data(), 0, input_data.size() * sizeof(float));
+    ggml_backend_tensor_set(weight, weight_data.data(), 0, weight_data.size() * sizeof(float));
+
+    scoped_env_var disable_concat("GGML_HRX_DISABLE_CONCAT", "1");
+    scoped_env_var disable_ssm_conv("GGML_HRX_DISABLE_SSM_CONV", "1");
+    GGML_ASSERT(ggml_backend_graph_compute(backend, graph) == GGML_STATUS_SUCCESS);
+
+    std::vector<float> expected_out(static_cast<size_t>(d_inner * n_tokens));
+    for (int64_t token = 0; token < n_tokens; ++token) {
+        for (int64_t channel = 0; channel < d_inner; ++channel) {
+            float sum = 0.0f;
+            for (int64_t i = 0; i < d_conv; ++i) {
+                const float x = ssm_conv_update_value(
+                    conv_state_data, input_data, state_width, n_tokens, channel, token + i);
+                const float w = weight_data[static_cast<size_t>(channel * d_conv + i)];
+                sum += x * w;
+            }
+            if (apply_silu) {
+                sum = sum / (1.0f + std::exp(-sum));
+            }
+            expected_out[static_cast<size_t>(token * d_inner + channel)] = sum;
+        }
+    }
+
+    std::vector<float> expected_state(static_cast<size_t>(state_width * d_inner));
+    for (int64_t channel = 0; channel < d_inner; ++channel) {
+        for (int64_t i = 0; i < state_width; ++i) {
+            expected_state[static_cast<size_t>(channel * state_width + i)] = ssm_conv_update_value(
+                conv_state_data, input_data, state_width, n_tokens, channel, n_tokens + i);
+        }
+    }
+
+    const char * out_label = strided_conv_state ?
+        (apply_silu ? "ssm_conv_update_strided_silu_fusion_out" : "ssm_conv_update_strided_fusion_out") :
+        (apply_silu ? "ssm_conv_update_silu_fusion_out" : "ssm_conv_update_fusion_out");
+    const char * state_label = strided_conv_state ?
+        (apply_silu ? "ssm_conv_update_strided_silu_fusion_state" : "ssm_conv_update_strided_fusion_state") :
+        (apply_silu ? "ssm_conv_update_silu_fusion_state" : "ssm_conv_update_fusion_state");
+    expect_near(tensor_to_float(out), expected_out, apply_silu ? 2.0e-5f : 2.0e-6f, out_label);
+    expect_near(tensor_to_float(state_update), expected_state, 0.0f, state_label);
+}
+
+static void run_ssm_conv_update_negative_state_offset_case(ggml_backend_t backend) {
+    ggml_context_ptr ctx = make_context();
+    constexpr int64_t D_CONV = 4;
+    constexpr int64_t STATE_WIDTH = D_CONV - 1;
+    constexpr int64_t D_INNER = 5;
+    constexpr int64_t N_TOKENS = 4;
+    ggml_tensor * conv_state = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, STATE_WIDTH, D_INNER);
+    ggml_tensor * input = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, N_TOKENS, D_INNER);
+    ggml_tensor * weight = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, D_CONV, D_INNER);
+    ggml_tensor * concat = ggml_concat(ctx.get(), conv_state, input, 0);
+    ggml_tensor * state_view = ggml_view_2d(ctx.get(), concat, STATE_WIDTH, D_INNER, concat->nb[1], 0);
+    ggml_tensor * state_dst = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, STATE_WIDTH, D_INNER);
+    ggml_tensor * state_update = ggml_cpy(ctx.get(), state_view, state_dst);
+    ggml_tensor * out = ggml_silu(ctx.get(), ggml_ssm_conv(ctx.get(), concat, weight));
+
+    ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 32, false);
+    ggml_build_forward_expand(graph, state_update);
+    ggml_build_forward_expand(graph, out);
+
+    ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
+    GGML_ASSERT(buffer != nullptr);
+
+    std::vector<float> data(static_cast<size_t>(N_TOKENS * D_INNER), 0.25f);
+    std::vector<float> state_data(static_cast<size_t>(STATE_WIDTH * D_INNER), -0.125f);
+    std::vector<float> weight_data(static_cast<size_t>(D_CONV * D_INNER), 0.0625f);
+    ggml_backend_tensor_set(conv_state, state_data.data(), 0, state_data.size() * sizeof(float));
+    ggml_backend_tensor_set(input, data.data(), 0, data.size() * sizeof(float));
+    ggml_backend_tensor_set(weight, weight_data.data(), 0, weight_data.size() * sizeof(float));
+
+    scoped_env_var disable_concat("GGML_HRX_DISABLE_CONCAT", "1");
+    scoped_env_var disable_ssm_conv("GGML_HRX_DISABLE_SSM_CONV", "1");
+    GGML_ASSERT(ggml_backend_graph_compute(backend, graph) != GGML_STATUS_SUCCESS);
+}
+
+static void run_ssm_conv_update_negative_state_overlap_case(ggml_backend_t backend) {
+    ggml_context_ptr ctx = make_context();
+    constexpr int64_t D_CONV = 4;
+    constexpr int64_t STATE_WIDTH = D_CONV - 1;
+    constexpr int64_t D_INNER = 5;
+    constexpr int64_t N_TOKENS = 4;
+    ggml_tensor * conv_state = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, STATE_WIDTH, D_INNER);
+    ggml_tensor * input = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, N_TOKENS, D_INNER);
+    ggml_tensor * weight = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, D_CONV, D_INNER);
+    ggml_tensor * concat = ggml_concat(ctx.get(), conv_state, input, 0);
+    ggml_tensor * state_view = ggml_view_2d(
+        ctx.get(), concat, STATE_WIDTH, D_INNER, concat->nb[1], static_cast<size_t>(N_TOKENS) * sizeof(float));
+    ggml_tensor * state_update = ggml_cpy(ctx.get(), state_view, conv_state);
+    ggml_tensor * out = ggml_silu(ctx.get(), ggml_ssm_conv(ctx.get(), concat, weight));
+
+    ggml_cgraph * graph = ggml_new_graph_custom(ctx.get(), 32, false);
+    ggml_build_forward_expand(graph, state_update);
+    ggml_build_forward_expand(graph, out);
+
+    ggml_backend_buffer_ptr buffer(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
+    GGML_ASSERT(buffer != nullptr);
+
+    std::vector<float> data(static_cast<size_t>(N_TOKENS * D_INNER), 0.25f);
+    std::vector<float> state_data(static_cast<size_t>(STATE_WIDTH * D_INNER), -0.125f);
+    std::vector<float> weight_data(static_cast<size_t>(D_CONV * D_INNER), 0.0625f);
+    ggml_backend_tensor_set(conv_state, state_data.data(), 0, state_data.size() * sizeof(float));
+    ggml_backend_tensor_set(input, data.data(), 0, data.size() * sizeof(float));
+    ggml_backend_tensor_set(weight, weight_data.data(), 0, weight_data.size() * sizeof(float));
+
+    scoped_env_var disable_concat("GGML_HRX_DISABLE_CONCAT", "1");
+    scoped_env_var disable_ssm_conv("GGML_HRX_DISABLE_SSM_CONV", "1");
+    GGML_ASSERT(ggml_backend_graph_compute(backend, graph) != GGML_STATUS_SUCCESS);
+}
+
 static void run_add8_fusion_case(ggml_backend_t backend, int64_t ncols, int64_t nrows) {
     ggml_context_ptr ctx = make_context();
     static constexpr int ARITY = 8;
@@ -2051,6 +2233,8 @@ int main() {
     run_argsort_case(backend.get(), 256, 2, GGML_SORT_ORDER_DESC);
     run_ssm_conv_case(backend.get(), 1, 3, 4, 2);
     run_ssm_conv_case(backend.get(), 4, 33, 17, 2);
+    run_ssm_conv_update_fusion_case(backend.get(), 4, 33, 17, false);
+    run_ssm_conv_update_fusion_case(backend.get(), 4, 33, 17, false, true);
     if (!env_enabled("GGML_HRX_DISABLE_FAST_APPROX_PROMPT")) {
         run_rms_norm_case(backend.get(), 1, 3, 2);
         run_rms_norm_case(backend.get(), 127, 3, 2);
@@ -2078,6 +2262,10 @@ int main() {
         run_mul_sum8_negative_duplicate_slice_case(backend.get());
         run_mul_add_add_fusion_case(backend.get(), 1, 1);
         run_mul_add_add_fusion_case(backend.get(), 257, 3);
+        run_ssm_conv_update_fusion_case(backend.get(), 4, 33, 17, true);
+        run_ssm_conv_update_fusion_case(backend.get(), 4, 33, 17, true, true);
+        run_ssm_conv_update_negative_state_offset_case(backend.get());
+        run_ssm_conv_update_negative_state_overlap_case(backend.get());
         run_mul_mat_vec_case(backend.get(), dev, GGML_TYPE_F32, 17, 3, 2, 2.0e-4f, "mul_mat_vec_f32");
         run_mul_mat_vec_case(backend.get(), dev, GGML_TYPE_F16, 257, 3, 2, 2.0e-4f, "mul_mat_vec_f16");
         run_mul_mat_vec_case(backend.get(), dev, GGML_TYPE_BF16, 257, 3, 2, 2.0e-3f, "mul_mat_vec_bf16");

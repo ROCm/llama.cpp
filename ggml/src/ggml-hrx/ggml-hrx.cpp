@@ -458,6 +458,26 @@ struct ggml_backend_hrx_ssm_conv_constants {
 
 static_assert(sizeof(ggml_backend_hrx_ssm_conv_constants) == 88);
 
+struct ggml_backend_hrx_ssm_conv_update_constants {
+    int64_t d_conv;
+    int64_t conv_state_width;
+    int64_t d_inner;
+    int64_t n_tokens;
+    int64_t n_seqs;
+    int64_t state_nb0;
+    int64_t state_nb1;
+    int64_t state_nb2;
+    int64_t input_nb0;
+    int64_t input_nb1;
+    int64_t weight_nb1;
+    int64_t dst_nb1;
+    int64_t dst_nb2;
+    int32_t apply_silu;
+    int32_t pad;
+};
+
+static_assert(sizeof(ggml_backend_hrx_ssm_conv_update_constants) == 112);
+
 struct ggml_backend_hrx_gated_delta_net_constants {
     int64_t S_v;
     int64_t H;
@@ -565,6 +585,7 @@ struct ggml_backend_hrx_device_context {
     ggml_backend_hrx_op_provider topk_moe_f32_wave32_provider;
     ggml_backend_hrx_op_provider rope_f32_provider;
     ggml_backend_hrx_op_provider ssm_conv_provider;
+    ggml_backend_hrx_op_provider ssm_conv_update_provider;
     ggml_backend_hrx_op_provider gated_delta_net_provider;
 };
 
@@ -635,6 +656,7 @@ static void ggml_backend_hrx_reset_providers(ggml_backend_hrx_device_context * d
     device_context->topk_moe_f32_wave32_provider.reset();
     device_context->rope_f32_provider.reset();
     device_context->ssm_conv_provider.reset();
+    device_context->ssm_conv_update_provider.reset();
     device_context->gated_delta_net_provider.reset();
 }
 
@@ -1869,6 +1891,11 @@ static bool ggml_backend_hrx_load_ssm_conv_provider(ggml_backend_hrx_device_cont
     return ggml_backend_hrx_load_catalog_provider(device_context, "hrx_ssm_conv_f32", &device_context->ssm_conv_provider);
 }
 
+static bool ggml_backend_hrx_load_ssm_conv_update_provider(ggml_backend_hrx_device_context * device_context) {
+    return ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_ssm_conv_update_f32", &device_context->ssm_conv_update_provider);
+}
+
 static bool ggml_backend_hrx_load_gated_delta_net_provider(ggml_backend_hrx_device_context * device_context) {
     return ggml_backend_hrx_load_catalog_provider(
         device_context, "hrx_gated_delta_net_f32", &device_context->gated_delta_net_provider);
@@ -2108,6 +2135,8 @@ static void ggml_backend_hrx_synchronize(ggml_backend_t backend) {
 static bool ggml_backend_hrx_approximate_kernels_disabled() {
     return ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_FAST_APPROX_PROMPT");
 }
+
+static bool ggml_backend_hrx_tensors_overlap(const ggml_tensor * a, const ggml_tensor * b);
 
 static bool ggml_backend_hrx_supports_rms_norm(
         const ggml_backend_hrx_device_context * device_context,
@@ -3368,6 +3397,79 @@ static bool ggml_backend_hrx_supports_ssm_conv(
            src0->nb[0] == sizeof(float) &&
            src1->nb[0] == sizeof(float) &&
            op->nb[0] == sizeof(float);
+}
+
+static bool ggml_backend_hrx_supports_ssm_conv_silu(
+        const ggml_backend_hrx_device_context * device_context,
+        const ggml_tensor * ssm,
+        const ggml_tensor * silu) {
+    return !ggml_backend_hrx_approximate_kernels_disabled() &&
+           device_context->silu_provider.kind == ggml_backend_hrx_provider_kind::hsaco &&
+           silu &&
+           silu->op == GGML_OP_UNARY &&
+           ggml_get_unary_op(silu) == GGML_UNARY_OP_SILU &&
+           silu->src[0] == ssm &&
+           silu->type == GGML_TYPE_F32 &&
+           ggml_are_same_shape(silu, ssm) &&
+           silu->nb[0] == sizeof(float);
+}
+
+static bool ggml_backend_hrx_supports_ssm_conv_update(
+        const ggml_backend_hrx_device_context * device_context,
+        const ggml_tensor * concat,
+        const ggml_tensor * state_view,
+        const ggml_tensor * state_update,
+        const ggml_tensor * ssm,
+        const ggml_tensor * silu) {
+    if (ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_SSM_CONV_UPDATE_FUSION") ||
+        device_context->ssm_conv_update_provider.kind != ggml_backend_hrx_provider_kind::hsaco ||
+        !ggml_backend_hrx_supports_concat_f32(device_context, concat) ||
+        !state_view ||
+        state_view->op != GGML_OP_VIEW ||
+        state_view->src[0] != concat ||
+        state_view->view_src != concat ||
+        !state_update ||
+        state_update->op != GGML_OP_CPY ||
+        state_update->src[0] != state_view ||
+        !state_update->src[1] ||
+        state_update->type != GGML_TYPE_F32 ||
+        !ggml_is_contiguous(state_update) ||
+        !ssm ||
+        !ggml_backend_hrx_supports_ssm_conv(device_context, ssm) ||
+        ssm->src[0] != concat) {
+        return false;
+    }
+
+    const ggml_tensor * conv_state = concat->src[0];
+    const ggml_tensor * input = concat->src[1];
+    const ggml_tensor * weight = ssm->src[1];
+    const int64_t conv_state_width = conv_state->ne[0];
+    const int64_t n_tokens = input->ne[0];
+    if (conv_state_width + 1 != weight->ne[0] ||
+        n_tokens != ssm->ne[1] ||
+        input->ne[1] != conv_state->ne[1] ||
+        input->ne[2] != 1 ||
+        input->ne[3] != 1 ||
+        conv_state->ne[2] != 1 ||
+        conv_state->ne[3] != 1 ||
+        ssm->ne[2] != 1 ||
+        state_view->ne[0] != conv_state_width ||
+        state_view->ne[1] != conv_state->ne[1] ||
+        state_view->ne[2] != 1 ||
+        state_view->ne[3] != 1 ||
+        state_view->nb[0] != sizeof(float) ||
+        state_view->nb[1] != concat->nb[1] ||
+        state_view->view_offs != static_cast<size_t>(n_tokens) * sizeof(float) ||
+        ggml_nbytes(state_update) != static_cast<size_t>(conv_state_width * conv_state->ne[1]) * sizeof(float) ||
+        ggml_backend_hrx_tensors_overlap(state_update, conv_state) ||
+        ggml_backend_hrx_tensors_overlap(state_update, input)) {
+        return false;
+    }
+
+    if (silu) {
+        return ggml_backend_hrx_supports_ssm_conv_silu(device_context, ssm, silu);
+    }
+    return true;
 }
 
 static bool ggml_backend_hrx_supports_gated_delta_net(
@@ -4987,6 +5089,75 @@ static ggml_status ggml_backend_hrx_dispatch_ssm_conv(
     return GGML_STATUS_SUCCESS;
 }
 
+static ggml_status ggml_backend_hrx_dispatch_ssm_conv_update(
+        ggml_backend_hrx_context * context,
+        const ggml_tensor * concat,
+        const ggml_tensor * state_update,
+        const ggml_tensor * ssm,
+        const ggml_tensor * fused_dst,
+        bool apply_silu) {
+    const ggml_tensor * conv_state = concat->src[0];
+    const ggml_tensor * input = concat->src[1];
+    const ggml_tensor * weight = ssm->src[1];
+    const ggml_tensor * out = fused_dst ? fused_dst : ssm;
+    hrx_buffer_ref_t bindings[5] = {};
+    if (!ggml_backend_hrx_tensor_buffer_ref(conv_state, &bindings[0]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(input, &bindings[1]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(weight, &bindings[2]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(state_update, &bindings[3]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(out, &bindings[4])) {
+        GGML_LOG_ERROR("%s: SSM_CONV_UPDATE tensor is not backed by a HRX buffer\n", __func__);
+        return GGML_STATUS_FAILED;
+    }
+
+    ggml_backend_hrx_ssm_conv_update_constants constants = {
+        /* .d_conv           = */ weight->ne[0],
+        /* .conv_state_width = */ conv_state->ne[0],
+        /* .d_inner          = */ conv_state->ne[1],
+        /* .n_tokens         = */ ssm->ne[1],
+        /* .n_seqs           = */ ssm->ne[2],
+        /* .state_nb0        = */ static_cast<int64_t>(conv_state->nb[0]),
+        /* .state_nb1        = */ static_cast<int64_t>(conv_state->nb[1]),
+        /* .state_nb2        = */ static_cast<int64_t>(conv_state->nb[2]),
+        /* .input_nb0        = */ static_cast<int64_t>(input->nb[0]),
+        /* .input_nb1        = */ static_cast<int64_t>(input->nb[1]),
+        /* .weight_nb1       = */ static_cast<int64_t>(weight->nb[1]),
+        /* .dst_nb1          = */ static_cast<int64_t>(out->nb[1]),
+        /* .dst_nb2          = */ static_cast<int64_t>(out->nb[2]),
+        /* .apply_silu       = */ apply_silu ? 1 : 0,
+        /* .pad              = */ 0,
+    };
+
+    const auto & provider = context->device_context->ssm_conv_update_provider;
+    const int64_t total = constants.d_inner * constants.n_tokens * constants.n_seqs;
+    const uint32_t workgroup_size = provider.export_info.workgroup_size[0] ?
+        provider.export_info.workgroup_size[0] : 256;
+    hrx_dispatch_config_t config = {
+        /* .workgroup_count = */ {
+            static_cast<uint32_t>((total + workgroup_size - 1) / workgroup_size),
+            1,
+            1,
+        },
+        /* .workgroup_size = */ { workgroup_size, 1, 1 },
+        /* .subgroup_size = */ 0,
+    };
+
+    if (!GGML_HRX_CHECK(hrx_stream_dispatch(
+            context->stream,
+            provider.executable,
+            provider.export_ordinal,
+            &config,
+            &constants,
+            sizeof(constants),
+            bindings,
+            5,
+            HRX_DISPATCH_FLAG_NONE))) {
+        return GGML_STATUS_FAILED;
+    }
+
+    return GGML_STATUS_SUCCESS;
+}
+
 static ggml_status ggml_backend_hrx_dispatch_gated_delta_net(
         ggml_backend_hrx_context * context,
         const ggml_tensor * dst) {
@@ -5237,6 +5408,92 @@ static bool ggml_backend_hrx_try_topk_moe_fusion(
         ggml_backend_hrx_topk_moe_fusion_memory_safe(cgraph, *fusion);
 }
 
+struct ggml_backend_hrx_ssm_conv_update_fusion {
+    const ggml_tensor * state_view = nullptr;
+    const ggml_tensor * state_update = nullptr;
+    const ggml_tensor * ssm = nullptr;
+    const ggml_tensor * out = nullptr;
+    int state_view_idx = -1;
+    int state_update_idx = -1;
+    int ssm_idx = -1;
+    int out_idx = -1;
+    int last_idx = -1;
+    bool apply_silu = false;
+};
+
+static bool ggml_backend_hrx_try_ssm_conv_update_fusion(
+        const ggml_cgraph * cgraph,
+        int concat_idx,
+        const ggml_backend_hrx_device_context * device_context,
+        ggml_backend_hrx_ssm_conv_update_fusion * fusion) {
+    *fusion = {};
+    const ggml_tensor * concat = cgraph->nodes[concat_idx];
+    if (!concat || concat->op != GGML_OP_CONCAT || concat_idx + 3 >= cgraph->n_nodes) {
+        return false;
+    }
+
+    const int state_view_idx = concat_idx + 1;
+    const int state_update_idx = concat_idx + 2;
+    const int ssm_idx = concat_idx + 3;
+    const ggml_tensor * state_view = cgraph->nodes[state_view_idx];
+    const ggml_tensor * state_update = cgraph->nodes[state_update_idx];
+    const ggml_tensor * ssm = cgraph->nodes[ssm_idx];
+    if (!state_view ||
+        state_view->op != GGML_OP_VIEW ||
+        !state_update ||
+        state_update->op != GGML_OP_CPY ||
+        state_update->src[0] != state_view ||
+        !ssm ||
+        ssm->op != GGML_OP_SSM_CONV ||
+        ssm->src[0] != concat) {
+        return false;
+    }
+
+    const ggml_tensor * out = ssm;
+    int out_idx = ssm_idx;
+    bool apply_silu = false;
+    if (out_idx + 1 < cgraph->n_nodes) {
+        const ggml_tensor * maybe_silu = cgraph->nodes[out_idx + 1];
+        if (maybe_silu &&
+            maybe_silu->op == GGML_OP_UNARY &&
+            ggml_get_unary_op(maybe_silu) == GGML_UNARY_OP_SILU &&
+            maybe_silu->src[0] == ssm) {
+            out = maybe_silu;
+            out_idx++;
+            apply_silu = true;
+        }
+    }
+
+    if (!ggml_backend_hrx_supports_ssm_conv_update(
+            device_context, concat, state_view, state_update, ssm, apply_silu ? out : nullptr)) {
+        return false;
+    }
+
+    std::array<int, 5> idxs = { concat_idx, state_view_idx, state_update_idx, ssm_idx, out_idx };
+    std::array<ggml_op, 5> ops = { GGML_OP_CONCAT, GGML_OP_VIEW, GGML_OP_CPY, GGML_OP_SSM_CONV, GGML_OP_UNARY };
+    int count = 5;
+    int outputs[2] = { state_update_idx, out_idx };
+    if (!apply_silu) {
+        count = 4;
+        outputs[1] = ssm_idx;
+    }
+    if (!ggml_can_fuse_subgraph_ext(cgraph, idxs.data(), count, ops.data(), outputs, 2)) {
+        return false;
+    }
+
+    fusion->state_view = state_view;
+    fusion->state_update = state_update;
+    fusion->ssm = ssm;
+    fusion->out = out;
+    fusion->state_view_idx = state_view_idx;
+    fusion->state_update_idx = state_update_idx;
+    fusion->ssm_idx = ssm_idx;
+    fusion->out_idx = out_idx;
+    fusion->last_idx = out_idx;
+    fusion->apply_silu = apply_silu;
+    return true;
+}
+
 struct ggml_backend_hrx_active_graph_guard {
     ggml_backend_hrx_context * context = nullptr;
     ggml_backend_hrx_context * previous_context = nullptr;
@@ -5290,6 +5547,22 @@ static ggml_status ggml_backend_hrx_graph_compute(ggml_backend_t backend, ggml_c
                 return GGML_STATUS_FAILED;
             }
             i = topk_moe.last_idx;
+            continue;
+        }
+        ggml_backend_hrx_ssm_conv_update_fusion ssm_update;
+        if (node->op == GGML_OP_CONCAT &&
+            !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_FUSION") &&
+            ggml_backend_hrx_try_ssm_conv_update_fusion(cgraph, i, context->device_context, &ssm_update)) {
+            if (ggml_backend_hrx_dispatch_ssm_conv_update(
+                    context,
+                    node,
+                    ssm_update.state_update,
+                    ssm_update.ssm,
+                    ssm_update.apply_silu ? ssm_update.out : nullptr,
+                    ssm_update.apply_silu) != GGML_STATUS_SUCCESS) {
+                return GGML_STATUS_FAILED;
+            }
+            i = ssm_update.last_idx;
             continue;
         }
         if (node->op == GGML_OP_MUL && !ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_FUSION")) {
@@ -5449,6 +5722,10 @@ static ggml_status ggml_backend_hrx_graph_compute(ggml_backend_t backend, ggml_c
                 }
                 break;
             case GGML_OP_CONCAT:
+                if (ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_CONCAT")) {
+                    GGML_LOG_ERROR("%s: CONCAT disabled by GGML_HRX_DISABLE_CONCAT\n", __func__);
+                    return GGML_STATUS_FAILED;
+                }
                 if (!ggml_backend_hrx_supports_concat_f32(context->device_context, node)) {
                     GGML_LOG_ERROR("%s: CONCAT shape/type/layout is unsupported\n", __func__);
                     return GGML_STATUS_FAILED;
@@ -5536,6 +5813,10 @@ static ggml_status ggml_backend_hrx_graph_compute(ggml_backend_t backend, ggml_c
                 }
                 break;
             case GGML_OP_SSM_CONV:
+                if (ggml_backend_hrx_env_enabled("GGML_HRX_DISABLE_SSM_CONV")) {
+                    GGML_LOG_ERROR("%s: SSM_CONV disabled by GGML_HRX_DISABLE_SSM_CONV\n", __func__);
+                    return GGML_STATUS_FAILED;
+                }
                 if (!ggml_backend_hrx_supports_ssm_conv(context->device_context, node)) {
                     GGML_LOG_ERROR("%s: SSM_CONV shape/type/layout is unsupported\n", __func__);
                     return GGML_STATUS_FAILED;
@@ -5849,6 +6130,7 @@ static std::unique_ptr<ggml_backend_hrx_reg_context> ggml_backend_hrx_create_reg
         (void) ggml_backend_hrx_load_topk_moe_f32_providers(device_context.get());
         (void) ggml_backend_hrx_load_rope_f32_provider(device_context.get());
         (void) ggml_backend_hrx_load_ssm_conv_provider(device_context.get());
+        (void) ggml_backend_hrx_load_ssm_conv_update_provider(device_context.get());
         (void) ggml_backend_hrx_load_gated_delta_net_provider(device_context.get());
 
         context->device_contexts.emplace_back(std::move(device_context));
