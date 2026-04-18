@@ -212,6 +212,24 @@ struct ggml_backend_hrx_mul_mat_vec_batched_constants {
 
 static_assert(sizeof(ggml_backend_hrx_mul_mat_vec_batched_constants) == 128);
 
+struct ggml_backend_hrx_mul_mat_id_q4_k_constants {
+    int64_t k;
+    int64_t rows;
+    int64_t n_ids;
+    int64_t n_tokens;
+    int64_t n_experts;
+    int64_t src0_nb1;
+    int64_t src0_nb2;
+    int64_t src1_nb1;
+    int64_t src1_nb2;
+    int64_t ids_nb0;
+    int64_t ids_nb1;
+    int64_t dst_nb1;
+    int64_t dst_nb2;
+};
+
+static_assert(sizeof(ggml_backend_hrx_mul_mat_id_q4_k_constants) == 104);
+
 struct ggml_backend_hrx_flash_attn_ext_f32_decode_constants {
     int64_t D;
     int64_t KV;
@@ -417,6 +435,8 @@ struct ggml_backend_hrx_device_context {
     ggml_backend_hrx_op_provider mul_mat_vec_f16_batched_provider;
     ggml_backend_hrx_op_provider mul_mat_vec_f32_provider;
     ggml_backend_hrx_op_provider mul_mat_vec_f32_batched_provider;
+    ggml_backend_hrx_op_provider mul_mat_id_q4_k_provider;
+    ggml_backend_hrx_op_provider mul_mat_id_q4_k_wg64_provider;
     ggml_backend_hrx_op_provider mul_mat_vec_q4_k_provider;
     ggml_backend_hrx_op_provider mul_mat_vec_q5_k_provider;
     ggml_backend_hrx_op_provider mul_mat_vec_q6_k_provider;
@@ -468,6 +488,8 @@ static void ggml_backend_hrx_reset_providers(ggml_backend_hrx_device_context * d
     device_context->mul_mat_vec_f16_batched_provider.reset();
     device_context->mul_mat_vec_f32_provider.reset();
     device_context->mul_mat_vec_f32_batched_provider.reset();
+    device_context->mul_mat_id_q4_k_provider.reset();
+    device_context->mul_mat_id_q4_k_wg64_provider.reset();
     device_context->mul_mat_vec_q4_k_provider.reset();
     device_context->mul_mat_vec_q5_k_provider.reset();
     device_context->mul_mat_vec_q6_k_provider.reset();
@@ -1377,6 +1399,14 @@ static bool ggml_backend_hrx_load_mul_mat_vec_providers(ggml_backend_hrx_device_
     return ok;
 }
 
+static bool ggml_backend_hrx_load_mul_mat_id_providers(ggml_backend_hrx_device_context * device_context) {
+    bool ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_id_q4_k_f32", &device_context->mul_mat_id_q4_k_provider);
+    ok = ggml_backend_hrx_load_catalog_provider(
+        device_context, "hrx_mul_mat_id_q4_k_wg64_f32", &device_context->mul_mat_id_q4_k_wg64_provider) || ok;
+    return ok;
+}
+
 static bool ggml_backend_hrx_load_flash_attn_ext_providers(ggml_backend_hrx_device_context * device_context) {
     bool ok = ggml_backend_hrx_load_catalog_provider(
         device_context, "hrx_flash_attn_ext_f32_f16_decode", &device_context->flash_attn_ext_f16_provider);
@@ -2080,6 +2110,65 @@ static bool ggml_backend_hrx_supports_mul_mat_vec(
 
     return ggml_backend_hrx_supports_mul_mat_vec_2d(device_context, op) ||
            ggml_backend_hrx_supports_mul_mat_vec_batched(device_context, op);
+}
+
+static const ggml_backend_hrx_op_provider * ggml_backend_hrx_mul_mat_id_q4_k_provider(
+        const ggml_backend_hrx_device_context * device_context,
+        int64_t k) {
+    if (k <= 2048 &&
+        device_context->mul_mat_id_q4_k_wg64_provider.kind == ggml_backend_hrx_provider_kind::hsaco) {
+        return &device_context->mul_mat_id_q4_k_wg64_provider;
+    }
+    return &device_context->mul_mat_id_q4_k_provider;
+}
+
+static bool ggml_backend_hrx_supports_mul_mat_id_q4_k(
+        const ggml_backend_hrx_device_context * device_context,
+        const ggml_tensor * op) {
+    if (ggml_backend_hrx_approximate_kernels_disabled()) {
+        return false;
+    }
+
+    const ggml_tensor * src0 = op->src[0];
+    const ggml_tensor * src1 = op->src[1];
+    const ggml_tensor * src2 = op->src[2];
+    if (!src0 || !src1 || !src2) {
+        return false;
+    }
+
+    const ggml_backend_hrx_op_provider * provider =
+        ggml_backend_hrx_mul_mat_id_q4_k_provider(device_context, src0->ne[0]);
+    return provider &&
+           provider->kind == ggml_backend_hrx_provider_kind::hsaco &&
+           src0->type == GGML_TYPE_Q4_K &&
+           src1->type == GGML_TYPE_F32 &&
+           src2->type == GGML_TYPE_I32 &&
+           op->type == GGML_TYPE_F32 &&
+           src0->ne[0] > 0 &&
+           src0->ne[1] > 0 &&
+           src0->ne[2] > 0 &&
+           src1->ne[1] > 0 &&
+           src1->ne[2] > 0 &&
+           src2->ne[0] > 0 &&
+           src2->ne[1] > 0 &&
+           src0->ne[0] % 256 == 0 &&
+           src0->ne[3] == 1 &&
+           src1->ne[3] == 1 &&
+           src2->ne[2] == 1 &&
+           src2->ne[3] == 1 &&
+           src0->ne[0] == src1->ne[0] &&
+           src2->ne[1] == src1->ne[2] &&
+           (src2->ne[0] == src1->ne[1] || src1->ne[1] == 1) &&
+           op->ne[0] == src0->ne[1] &&
+           op->ne[1] == src2->ne[0] &&
+           op->ne[2] == src2->ne[1] &&
+           op->ne[3] == 1 &&
+           src0->ne[1] <= std::numeric_limits<uint32_t>::max() &&
+           src2->ne[0] <= std::numeric_limits<uint32_t>::max() / src2->ne[1] &&
+           src0->nb[0] == ggml_type_size(src0->type) &&
+           src1->nb[0] == ggml_type_size(src1->type) &&
+           src2->nb[0] == ggml_type_size(src2->type) &&
+           op->nb[0] == ggml_type_size(op->type);
 }
 
 static const ggml_backend_hrx_op_provider * ggml_backend_hrx_flash_attn_ext_f32_decode_provider(
@@ -3149,6 +3238,65 @@ static ggml_status ggml_backend_hrx_dispatch_mul_mat_vec(
     return GGML_STATUS_SUCCESS;
 }
 
+static ggml_status ggml_backend_hrx_dispatch_mul_mat_id_q4_k(
+        ggml_backend_hrx_context * context,
+        const ggml_tensor * dst) {
+    const ggml_tensor * src0 = dst->src[0];
+    const ggml_tensor * src1 = dst->src[1];
+    const ggml_tensor * src2 = dst->src[2];
+    hrx_buffer_ref_t bindings[4] = {};
+    if (!ggml_backend_hrx_tensor_buffer_ref(src0, &bindings[0]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(src1, &bindings[1]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(src2, &bindings[2]) ||
+        !ggml_backend_hrx_tensor_buffer_ref(dst, &bindings[3])) {
+        GGML_LOG_ERROR("%s: MUL_MAT_ID tensor is not backed by a HRX buffer\n", __func__);
+        return GGML_STATUS_FAILED;
+    }
+
+    ggml_backend_hrx_mul_mat_id_q4_k_constants constants = {
+        /* .k          = */ src0->ne[0],
+        /* .rows       = */ src0->ne[1],
+        /* .n_ids      = */ src2->ne[0],
+        /* .n_tokens   = */ src2->ne[1],
+        /* .n_experts  = */ src0->ne[2],
+        /* .src0_nb1   = */ static_cast<int64_t>(src0->nb[1]),
+        /* .src0_nb2   = */ static_cast<int64_t>(src0->nb[2]),
+        /* .src1_nb1   = */ src1->ne[1] == 1 ? 0 : static_cast<int64_t>(src1->nb[1]),
+        /* .src1_nb2   = */ static_cast<int64_t>(src1->nb[2]),
+        /* .ids_nb0    = */ static_cast<int64_t>(src2->nb[0]),
+        /* .ids_nb1    = */ static_cast<int64_t>(src2->nb[1]),
+        /* .dst_nb1    = */ static_cast<int64_t>(dst->nb[1]),
+        /* .dst_nb2    = */ static_cast<int64_t>(dst->nb[2]),
+    };
+
+    const ggml_backend_hrx_op_provider * provider =
+        ggml_backend_hrx_mul_mat_id_q4_k_provider(context->device_context, constants.k);
+    if (!provider || provider->kind != ggml_backend_hrx_provider_kind::hsaco) {
+        GGML_LOG_ERROR("%s: MUL_MAT_ID provider is unavailable\n", __func__);
+        return GGML_STATUS_FAILED;
+    }
+
+    const uint32_t workgroup_size = provider->export_info.workgroup_size[0] ?
+        provider->export_info.workgroup_size[0] : 256;
+    hrx_dispatch_config_t config = {
+        /* .workgroup_count = */ {
+            static_cast<uint32_t>(constants.rows),
+            static_cast<uint32_t>(constants.n_ids * constants.n_tokens),
+            1,
+        },
+        /* .workgroup_size = */ { workgroup_size, 1, 1 },
+        /* .subgroup_size = */ 0,
+    };
+
+    if (!GGML_HRX_CHECK(hrx_stream_dispatch(
+            context->stream, provider->executable, provider->export_ordinal, &config,
+            &constants, sizeof(constants), bindings, 4, HRX_DISPATCH_FLAG_NONE))) {
+        return GGML_STATUS_FAILED;
+    }
+
+    return GGML_STATUS_SUCCESS;
+}
+
 static ggml_status ggml_backend_hrx_dispatch_flash_attn_ext_f32_decode(
         ggml_backend_hrx_context * context,
         const ggml_tensor * dst) {
@@ -3819,6 +3967,15 @@ static ggml_status ggml_backend_hrx_graph_compute(ggml_backend_t backend, ggml_c
                     return GGML_STATUS_FAILED;
                 }
                 break;
+            case GGML_OP_MUL_MAT_ID:
+                if (!ggml_backend_hrx_supports_mul_mat_id_q4_k(context->device_context, node)) {
+                    GGML_LOG_ERROR("%s: MUL_MAT_ID shape/type/layout is unsupported\n", __func__);
+                    return GGML_STATUS_FAILED;
+                }
+                if (ggml_backend_hrx_dispatch_mul_mat_id_q4_k(context, node) != GGML_STATUS_SUCCESS) {
+                    return GGML_STATUS_FAILED;
+                }
+                break;
             default:
                 GGML_LOG_ERROR("%s: unsupported op %s\n", __func__, ggml_op_desc(node));
                 return GGML_STATUS_FAILED;
@@ -3967,6 +4124,8 @@ static bool ggml_backend_hrx_device_supports_op(ggml_backend_dev_t dev, const gg
             return ggml_backend_hrx_supports_ssm_conv(ggml_backend_hrx_get_device_context(dev), op);
         case GGML_OP_GATED_DELTA_NET:
             return ggml_backend_hrx_supports_gated_delta_net(ggml_backend_hrx_get_device_context(dev), op);
+        case GGML_OP_MUL_MAT_ID:
+            return ggml_backend_hrx_supports_mul_mat_id_q4_k(ggml_backend_hrx_get_device_context(dev), op);
         default:
             return false;
     }
@@ -4089,6 +4248,7 @@ static std::unique_ptr<ggml_backend_hrx_reg_context> ggml_backend_hrx_create_reg
         (void) ggml_backend_hrx_load_get_rows_f32_provider(device_context.get());
         (void) ggml_backend_hrx_load_get_rows_q5_k_provider(device_context.get());
         (void) ggml_backend_hrx_load_mul_mat_vec_providers(device_context.get());
+        (void) ggml_backend_hrx_load_mul_mat_id_providers(device_context.get());
         (void) ggml_backend_hrx_load_flash_attn_ext_providers(device_context.get());
         (void) ggml_backend_hrx_load_concat_f32_provider(device_context.get());
         (void) ggml_backend_hrx_load_copy_strided_f32_provider(device_context.get());
