@@ -5,7 +5,7 @@ template.decl @ggml.unary_f32.apply(%op: index, %value: f32) -> (f32)
 
 template.decl @ggml.unary_f32.apply_vector4(%op: index, %values: vector<4xf32>) -> (vector<4xf32>)
 
-template.def<@ggml.unary_f32.apply> device priority(1) @ggml_unary_f32_apply(%op: index, %value: f32) -> (f32) {
+func.def retain @ggml_unary_f32_apply_impl(%op: index, %value: f32) -> (f32) {
   %c0_f32 = scalar.constant 0.0 : f32
   %c0_5_f32 = scalar.constant 0.5 : f32
   %c1_f32 = scalar.constant 1.0 : f32
@@ -213,6 +213,11 @@ template.def<@ggml.unary_f32.apply> device priority(1) @ggml_unary_f32_apply(%op
   %op_identity = index.constant 23 : index
   %is_identity = index.cmp eq, %op, %op_identity : index
   %result = scf.select %is_identity, %value, %log_selected : f32
+  func.return %result : f32
+}
+
+template.def<@ggml.unary_f32.apply> device priority(1) @ggml_unary_f32_apply(%op: index, %value: f32) -> (f32) {
+  %result = func.call @ggml_unary_f32_apply_impl(%op, %value) : (index, f32) -> (f32)
   template.return %result : f32
 }
 
@@ -221,10 +226,10 @@ template.def<@ggml.unary_f32.apply_vector4> device priority(1) @ggml_unary_f32_a
   %value1 = vector.extract %values[1] : vector<4xf32> -> f32
   %value2 = vector.extract %values[2] : vector<4xf32> -> f32
   %value3 = vector.extract %values[3] : vector<4xf32> -> f32
-  %result0 = template.apply<@ggml.unary_f32.apply>(%op, %value0) : (index, f32) -> (f32)
-  %result1 = template.apply<@ggml.unary_f32.apply>(%op, %value1) : (index, f32) -> (f32)
-  %result2 = template.apply<@ggml.unary_f32.apply>(%op, %value2) : (index, f32) -> (f32)
-  %result3 = template.apply<@ggml.unary_f32.apply>(%op, %value3) : (index, f32) -> (f32)
+  %result0 = func.call @ggml_unary_f32_apply_impl(%op, %value0) : (index, f32) -> (f32)
+  %result1 = func.call @ggml_unary_f32_apply_impl(%op, %value1) : (index, f32) -> (f32)
+  %result2 = func.call @ggml_unary_f32_apply_impl(%op, %value2) : (index, f32) -> (f32)
+  %result3 = func.call @ggml_unary_f32_apply_impl(%op, %value3) : (index, f32) -> (f32)
   %result = vector.from_elements %result0, %result1, %result2, %result3 : vector<4xf32>
   template.return %result : vector<4xf32>
 }
