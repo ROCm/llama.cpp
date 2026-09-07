@@ -232,15 +232,11 @@ struct ggml_cuda_mmq_config {
 #include "mmq-config-rdna2.cuh"
 #include "mmq-config-rdna3.cuh"
 #include "mmq-config-rdna4.cuh"
-#include "mmq-config-rdna35.cuh" // after rdna4: falls through to ggml_cuda_mmq_get_config_rdna4
-
+#include "mmq-config-rdna3-5.cuh" // add rocmfp4 rows
 #undef CASE
 
 // RDNA3.5 (gfx1151) uses fork-specific MMQ kernels (ggml_cuda_mmq_load_tiles_q4_K_rdna35,
 // ggml_cuda_mmq_vec_dot_q6_K_q8_1_mma_rdna35) that static_assert nthreads == 128 && I == 64,
-// so its config must force that shape. ggml_cuda_mmq_get_config_rdna3_5 (mmq-config-rdna35.cuh)
-// supplies the gfx1151-only rocmfp4 CASEs and falls through to the rdna4 table for every other
-// type; we then force the 128/64 shape the fork's RDNA3.5 kernels require.
 static constexpr __host__ __device__ ggml_cuda_mmq_config ggml_cuda_mmq_get_config_rdna35(
         ggml_type type, int J, bool fallback) {
     ggml_cuda_mmq_config config = ggml_cuda_mmq_get_config_rdna3_5(type, J, fallback);
