@@ -112,6 +112,9 @@ typedef sycl::half2 ggml_half2;
 #define QI_NVFP4 (QK_NVFP4 / (4 * QR_NVFP4))
 #define QR_NVFP4 2
 
+#define QI_ROCMFP4 (QK_ROCMFP4 / (4 * QR_ROCMFP4))
+#define QR_ROCMFP4 2
+
 #define QI5_0 (QK5_0 / (4 * QR5_0))
 #define QR5_0 2
 
@@ -225,6 +228,23 @@ typedef struct {
     uint8_t qs[QK_NVFP4/2];           // packed 4-bit E2M1 values (32 bytes)
 } block_nvfp4;
 static_assert(sizeof(block_nvfp4) == sizeof(uint8_t)*(QK_NVFP4/QK_NVFP4_SUB) + QK_NVFP4/2, "wrong nvfp4 block size/padding");
+
+#define QK_ROCMFP4 32
+// AMD-tuned compact layout: 16 bytes of packed E2M1-derived 4-bit codes, then
+// one unsigned E4M3 scale byte per 16-weight half block.
+typedef struct {
+    uint8_t qs[QK_ROCMFP4/2];
+    uint8_t e[2];
+} block_rocmfp4;
+static_assert(sizeof(block_rocmfp4) == QK_ROCMFP4/2 + 2*sizeof(uint8_t), "wrong rocmfp4 block size/padding");
+
+// Speed-focused layout: same 32 packed ROCmFP4 nibbles, but one UE4M3 scale
+// for the whole block.
+typedef struct {
+    uint8_t qs[QK_ROCMFP4/2];
+    uint8_t e;
+} block_rocmfp4_fast;
+static_assert(sizeof(block_rocmfp4_fast) == QK_ROCMFP4/2 + sizeof(uint8_t), "wrong rocmfp4 fast block size/padding");
 
 #define QK5_0 32
 typedef struct {
@@ -1135,6 +1155,47 @@ GGML_TABLE_END()
 GGML_TABLE_BEGIN(int8_t, kvalues_rocmfp4, 16)
     0, 1, 2, 3, 4, 6, 8, 10, 0, -1, -2, -3, -4, -6, -8, -10,
 GGML_TABLE_END()
+
+// ROCmFP4 UE4M3 "half-scale" values for the finite scale bytes 0x00..0x7e (127
+// entries): the subnormal run (byte>>3 == 0, value M*2^-10) followed by 15
+// normal exponent groups (value (8+M)*2^(e-10), e=1..15). This is the single
+// source of truth shared by both materializations of the table: the CPU
+// quantizer scale-search table (ggml-quants.c) and the opt-in GPU
+// constant-memory LUT (ggml-cuda/common.cuh). Each backend stamps its own
+// storage-qualified array from this list so the two can never drift.
+#define GGML_ROCMFP4_SCALE_UE4M3_HALF_LIST \
+    (0) * 0x1p-10f, (1) * 0x1p-10f, (2) * 0x1p-10f, (3) * 0x1p-10f, \
+    (4) * 0x1p-10f, (5) * 0x1p-10f, (6) * 0x1p-10f, (7) * 0x1p-10f, \
+    (8 + 0) * 0x1p-10f, (8 + 1) * 0x1p-10f, (8 + 2) * 0x1p-10f, (8 + 3) * 0x1p-10f, \
+    (8 + 4) * 0x1p-10f, (8 + 5) * 0x1p-10f, (8 + 6) * 0x1p-10f, (8 + 7) * 0x1p-10f, \
+    (8 + 0) * 0x1p-9f, (8 + 1) * 0x1p-9f, (8 + 2) * 0x1p-9f, (8 + 3) * 0x1p-9f, \
+    (8 + 4) * 0x1p-9f, (8 + 5) * 0x1p-9f, (8 + 6) * 0x1p-9f, (8 + 7) * 0x1p-9f, \
+    (8 + 0) * 0x1p-8f, (8 + 1) * 0x1p-8f, (8 + 2) * 0x1p-8f, (8 + 3) * 0x1p-8f, \
+    (8 + 4) * 0x1p-8f, (8 + 5) * 0x1p-8f, (8 + 6) * 0x1p-8f, (8 + 7) * 0x1p-8f, \
+    (8 + 0) * 0x1p-7f, (8 + 1) * 0x1p-7f, (8 + 2) * 0x1p-7f, (8 + 3) * 0x1p-7f, \
+    (8 + 4) * 0x1p-7f, (8 + 5) * 0x1p-7f, (8 + 6) * 0x1p-7f, (8 + 7) * 0x1p-7f, \
+    (8 + 0) * 0x1p-6f, (8 + 1) * 0x1p-6f, (8 + 2) * 0x1p-6f, (8 + 3) * 0x1p-6f, \
+    (8 + 4) * 0x1p-6f, (8 + 5) * 0x1p-6f, (8 + 6) * 0x1p-6f, (8 + 7) * 0x1p-6f, \
+    (8 + 0) * 0x1p-5f, (8 + 1) * 0x1p-5f, (8 + 2) * 0x1p-5f, (8 + 3) * 0x1p-5f, \
+    (8 + 4) * 0x1p-5f, (8 + 5) * 0x1p-5f, (8 + 6) * 0x1p-5f, (8 + 7) * 0x1p-5f, \
+    (8 + 0) * 0x1p-4f, (8 + 1) * 0x1p-4f, (8 + 2) * 0x1p-4f, (8 + 3) * 0x1p-4f, \
+    (8 + 4) * 0x1p-4f, (8 + 5) * 0x1p-4f, (8 + 6) * 0x1p-4f, (8 + 7) * 0x1p-4f, \
+    (8 + 0) * 0x1p-3f, (8 + 1) * 0x1p-3f, (8 + 2) * 0x1p-3f, (8 + 3) * 0x1p-3f, \
+    (8 + 4) * 0x1p-3f, (8 + 5) * 0x1p-3f, (8 + 6) * 0x1p-3f, (8 + 7) * 0x1p-3f, \
+    (8 + 0) * 0x1p-2f, (8 + 1) * 0x1p-2f, (8 + 2) * 0x1p-2f, (8 + 3) * 0x1p-2f, \
+    (8 + 4) * 0x1p-2f, (8 + 5) * 0x1p-2f, (8 + 6) * 0x1p-2f, (8 + 7) * 0x1p-2f, \
+    (8 + 0) * 0x1p-1f, (8 + 1) * 0x1p-1f, (8 + 2) * 0x1p-1f, (8 + 3) * 0x1p-1f, \
+    (8 + 4) * 0x1p-1f, (8 + 5) * 0x1p-1f, (8 + 6) * 0x1p-1f, (8 + 7) * 0x1p-1f, \
+    (8 + 0) * 0x1p+0f, (8 + 1) * 0x1p+0f, (8 + 2) * 0x1p+0f, (8 + 3) * 0x1p+0f, \
+    (8 + 4) * 0x1p+0f, (8 + 5) * 0x1p+0f, (8 + 6) * 0x1p+0f, (8 + 7) * 0x1p+0f, \
+    (8 + 0) * 0x1p+1f, (8 + 1) * 0x1p+1f, (8 + 2) * 0x1p+1f, (8 + 3) * 0x1p+1f, \
+    (8 + 4) * 0x1p+1f, (8 + 5) * 0x1p+1f, (8 + 6) * 0x1p+1f, (8 + 7) * 0x1p+1f, \
+    (8 + 0) * 0x1p+2f, (8 + 1) * 0x1p+2f, (8 + 2) * 0x1p+2f, (8 + 3) * 0x1p+2f, \
+    (8 + 4) * 0x1p+2f, (8 + 5) * 0x1p+2f, (8 + 6) * 0x1p+2f, (8 + 7) * 0x1p+2f, \
+    (8 + 0) * 0x1p+3f, (8 + 1) * 0x1p+3f, (8 + 2) * 0x1p+3f, (8 + 3) * 0x1p+3f, \
+    (8 + 4) * 0x1p+3f, (8 + 5) * 0x1p+3f, (8 + 6) * 0x1p+3f, (8 + 7) * 0x1p+3f, \
+    (8 + 0) * 0x1p+4f, (8 + 1) * 0x1p+4f, (8 + 2) * 0x1p+4f, (8 + 3) * 0x1p+4f, \
+    (8 + 4) * 0x1p+4f, (8 + 5) * 0x1p+4f, (8 + 6) * 0x1p+4f
 
 #define NGRID_IQ1S 2048
 #define IQ1S_DELTA 0.125f

@@ -8178,6 +8178,8 @@ static constexpr ggml_type rdna35_mmq_types[] = {
     GGML_TYPE_IQ4_NL,
     GGML_TYPE_MXFP4,
     GGML_TYPE_NVFP4,
+    GGML_TYPE_Q4_0_ROCMFP4,
+    GGML_TYPE_Q4_0_ROCMFP4_FAST,
 };
 
 static constexpr mmq_test_shape rdna35_mmq_shapes[] = {

@@ -14,7 +14,6 @@
 #include "ops.h"
 #include "ggml.h"
 #include "common.h"
-#include "../../rocmfp4/rocmfp4.h"
 
 #if defined(_MSC_VER) || defined(__MINGW32__)
 #include <malloc.h> // using malloc.h with MSC/MINGW

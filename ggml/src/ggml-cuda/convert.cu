@@ -1,6 +1,5 @@
 #include "convert.cuh"
 #include "dequantize.cuh"
-#include "../../rocmfp4/rocmfp4_hip_scale.cuh"
 
 #include <cstdint>
 

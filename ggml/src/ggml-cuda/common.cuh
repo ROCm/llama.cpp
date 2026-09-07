@@ -21,7 +21,6 @@
 #endif
 #endif
 #include "ggml-common.h"
-#include "../../rocmfp4/rocmfp4.h"
 
 #include <array>
 #include <algorithm>
@@ -865,6 +864,36 @@ static __device__ __forceinline__ float ggml_cuda_ue4m3_to_fp32(uint8_t x) {
     return static_cast<float>(raw / 2);
 #endif // defined(FP8_AVAILABLE) && !defined(GGML_USE_HIP)
 #endif // defined(GGML_USE_HIP) && defined(CDNA3) && defined(FP8_AVAILABLE) && HIP_VERSION >= 60200000
+}
+
+// ============================================================================
+// ROCmFP4 (AMD gfx1151) device scale + FP4 codebook decode helpers.
+// GGML_ROCMFP4_USE_SCALE_LUT is an opt-in AMD-specific escape hatch (constant-memory table) kept for profiling.
+//  ============================================================================
+
+#ifndef GGML_ROCMFP4_USE_SCALE_LUT
+#define GGML_ROCMFP4_USE_SCALE_LUT 0
+#endif
+
+#if defined(GGML_USE_HIP) && GGML_ROCMFP4_USE_SCALE_LUT
+// Values come from the shared GGML_ROCMFP4_SCALE_UE4M3_HALF_LIST in ggml-common.h
+// (single source of truth, also used by the CPU quantizer table in ggml-quants.c).
+static __device__ __constant__ const float rocmfp4_scale_ue4m3_half_lut[127] = { GGML_ROCMFP4_SCALE_UE4M3_HALF_LIST };
+#endif
+
+static __device__ __forceinline__ float rocmfp4_ue4m3_to_fp32_half_finite(uint8_t x) {
+#if defined(GGML_USE_HIP) && GGML_ROCMFP4_USE_SCALE_LUT
+    return x <= 0x7e ? rocmfp4_scale_ue4m3_half_lut[x] : 0.0f;   // opt-in fast table
+#else
+    return ggml_cuda_ue4m3_to_fp32(x);                          // default: shared decoder
+#endif
+}
+
+static __device__ __forceinline__ int8_t rocmfp4_decode_i8(uint8_t q) {
+    q &= 0x0f;
+    const int mag3 = q & 0x07;
+    const int mag = mag3 <= 4 ? mag3 : 2*mag3 - 4;
+    return (q & 0x08) ? -mag : mag;
 }
 
 static __device__ __forceinline__ uint8_t ggml_cuda_fp32_to_ue4m3(float x) {

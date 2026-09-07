@@ -9,7 +9,6 @@
 
 // FIXME: required here for quantization functions
 #include "ggml-quants.h"
-#include "../rocmfp4/rocmfp4.h"
 
 #ifdef GGML_USE_CPU_HBM
 #include <hbwmalloc.h>

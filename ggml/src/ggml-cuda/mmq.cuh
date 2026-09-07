@@ -76,6 +76,9 @@ static mmq_q8_1_ds_layout mmq_get_q8_1_ds_layout(const ggml_type type_x) {
             return MMQ_Q8_1_DS_LAYOUT_D4;
         case GGML_TYPE_NVFP4:
             return MMQ_Q8_1_DS_LAYOUT_D4;
+        case GGML_TYPE_Q4_0_ROCMFP4:
+        case GGML_TYPE_Q4_0_ROCMFP4_FAST:
+            return MMQ_Q8_1_DS_LAYOUT_D4;
         case GGML_TYPE_Q2_K:
             return MMQ_Q8_1_DS_LAYOUT_D2S6;
         case GGML_TYPE_Q3_K:
@@ -228,19 +231,15 @@ struct ggml_cuda_mmq_config {
 #include "mmq-config-cdna.cuh"
 #include "mmq-config-rdna2.cuh"
 #include "mmq-config-rdna3.cuh"
-#include "mmq-config-rdna3-5.cuh"
 #include "mmq-config-rdna4.cuh"
-
+#include "mmq-config-rdna3-5.cuh" // add rocmfp4 rows
 #undef CASE
 
 // RDNA3.5 (gfx1151) uses fork-specific MMQ kernels (ggml_cuda_mmq_load_tiles_q4_K_rdna35,
 // ggml_cuda_mmq_vec_dot_q6_K_q8_1_mma_rdna35) that static_assert nthreads == 128 && I == 64,
-// so its config must force that shape. Upstream's dedicated get_config_rdna3_5 (256/128 at
-// wide J) is incompatible with those kernels; keep the fork override for RDNA3.5 while the
-// other AMD arches use upstream's per-arch tables.
 static constexpr __host__ __device__ ggml_cuda_mmq_config ggml_cuda_mmq_get_config_rdna35(
         ggml_type type, int J, bool fallback) {
-    ggml_cuda_mmq_config config = ggml_cuda_mmq_get_config_rdna4(type, J, fallback);
+    ggml_cuda_mmq_config config = ggml_cuda_mmq_get_config_rdna3_5(type, J, fallback);
     config.nthreads = 128;
     config.I = 64;
     return config;
@@ -415,6 +414,8 @@ static constexpr __host__ __device__ tile_x_sizes mmq_get_dp4a_tile_x_sizes(ggml
         case GGML_TYPE_Q8_0:    return MMQ_DP4A_TXS_Q8_0;
         case GGML_TYPE_MXFP4:   return MMQ_DP4A_TXS_Q8_1;
         case GGML_TYPE_NVFP4:   return MMQ_DP4A_TXS_Q8_0_16;
+        case GGML_TYPE_Q4_0_ROCMFP4:      return MMQ_DP4A_TXS_Q8_0_16;
+        case GGML_TYPE_Q4_0_ROCMFP4_FAST: return MMQ_DP4A_TXS_Q8_0;
         case GGML_TYPE_Q2_K:    return MMQ_DP4A_TXS_Q2_K;
         case GGML_TYPE_Q3_K:    return MMQ_DP4A_TXS_Q3_K;
         case GGML_TYPE_Q4_K:    return MMQ_DP4A_TXS_Q4_K;
@@ -769,6 +770,18 @@ static constexpr __device__ ggml_cuda_mmq_util_funcs ggml_cuda_mmq_get_util_func
                     ggml_cuda_mmq_load_tiles_nvfp4<type, J, fallback>,
                     ggml_cuda_mmq_vec_dot_q8_0_16_q8_1_dp4a<type, J, fallback>,
                     ggml_cuda_mmq_write_back_dp4a<type, J, fallback>);
+            case GGML_TYPE_Q4_0_ROCMFP4:
+                return ggml_cuda_mmq_util_funcs(
+                    VDR_ROCMFP4_Q8_1_MMQ,
+                    ggml_cuda_mmq_load_tiles_rocmfp4<type, J, fallback>,
+                    ggml_cuda_mmq_vec_dot_q8_0_16_q8_1_dp4a<type, J, fallback>,
+                    ggml_cuda_mmq_write_back_dp4a<type, J, fallback>);
+            case GGML_TYPE_Q4_0_ROCMFP4_FAST:
+                return ggml_cuda_mmq_util_funcs(
+                    VDR_ROCMFP4_FAST_Q8_1_MMQ,
+                    ggml_cuda_mmq_load_tiles_rocmfp4_fast<type, J, fallback>,
+                    ggml_cuda_mmq_vec_dot_q8_0_q8_1_dp4a<type, J, fallback>,
+                    ggml_cuda_mmq_write_back_dp4a<type, J, fallback>);
             default:
                 return ggml_cuda_mmq_util_funcs(1, nullptr, nullptr, nullptr);
         }
@@ -936,6 +949,18 @@ static constexpr __device__ ggml_cuda_mmq_util_funcs ggml_cuda_mmq_get_util_func
                 -1,
                 ggml_cuda_mmq_load_tiles_nvfp4<type, J, fallback>,
                 ggml_cuda_mmq_vec_dot_q8_0_16_q8_1_mma<type, J, fallback>,
+                ggml_cuda_mmq_write_back_mma<type, J, fallback>);
+        case GGML_TYPE_Q4_0_ROCMFP4:
+            return ggml_cuda_mmq_util_funcs(
+                -1,
+                ggml_cuda_mmq_load_tiles_rocmfp4<type, J, fallback>,
+                ggml_cuda_mmq_vec_dot_q8_0_16_q8_1_mma<type, J, fallback>,
+                ggml_cuda_mmq_write_back_mma<type, J, fallback>);
+        case GGML_TYPE_Q4_0_ROCMFP4_FAST:
+            return ggml_cuda_mmq_util_funcs(
+                -1,
+                ggml_cuda_mmq_load_tiles_rocmfp4_fast<type, J, fallback>,
+                ggml_cuda_mmq_vec_dot_q8_0_q8_1_mma<type, J, fallback, MMQ_Q8_1_DS_LAYOUT_D4>,
                 ggml_cuda_mmq_write_back_mma<type, J, fallback>);
         default:
             return ggml_cuda_mmq_util_funcs(1, nullptr, nullptr, nullptr);
@@ -2034,6 +2059,8 @@ extern DECL_MMQ_CASE(GGML_TYPE_IQ4_XS);
 // -----------------------------------------
 extern DECL_MMQ_CASE(GGML_TYPE_MXFP4);
 extern DECL_MMQ_CASE(GGML_TYPE_NVFP4);
+extern DECL_MMQ_CASE(GGML_TYPE_Q4_0_ROCMFP4);
+extern DECL_MMQ_CASE(GGML_TYPE_Q4_0_ROCMFP4_FAST);
 
 // -------------------------------------------------------------------------------------------------------------------------
 
