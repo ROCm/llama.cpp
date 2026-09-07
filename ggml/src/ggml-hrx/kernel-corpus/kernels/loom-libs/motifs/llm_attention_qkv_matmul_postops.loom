@@ -43,7 +43,33 @@ template.def<@llm.attention_qkv.rope_vector4> device @llm_attention_qkv_rope_vec
   %position = scalar.sitofp %position_i32 : i32 to f32
   %theta_packet = vector.load %theta_view[%theta_channel] : view<[%half_head_size]xf32> -> vector<2xf32>
   %freq_factors_packet = vector.load %freq_factors_view[%theta_channel] : view<[%half_head_size]xf32> -> vector<2xf32>
-  %rotated = template.apply<@llm.attention_qkv.normal_rope_vector4>(%position, %theta_packet, %freq_factors_packet, %values) : (f32, vector<2xf32>, vector<2xf32>, vector<4xf32>) -> (vector<4xf32>)
+  // Keep normal RoPE local because nested template providers are consumed
+  // before all shared callers have been expanded.
+  %x0 = vector.extract %values[0] : vector<4xf32> -> f32
+  %y0 = vector.extract %values[1] : vector<4xf32> -> f32
+  %x1 = vector.extract %values[2] : vector<4xf32> -> f32
+  %y1 = vector.extract %values[3] : vector<4xf32> -> f32
+  %x_values = vector.from_elements %x0, %x1 : vector<2xf32>
+  %y_values = vector.from_elements %y0, %y1 : vector<2xf32>
+  %position_vector = vector.splat %position : vector<2xf32>
+  %inverse_two_pi = scalar.constant 0.15915494309189535 : f32
+  %inverse_two_pi_vector = vector.splat %inverse_two_pi : vector<2xf32>
+  %scaled_theta = vector.divf<reassoc|nnan|ninf|nsz|arcp> %theta_packet, %freq_factors_packet : vector<2xf32>
+  %angles = vector.mulf<reassoc|nnan|ninf|nsz|contract> %position_vector, %scaled_theta : vector<2xf32>
+  %turns = vector.mulf<reassoc|nnan|ninf|nsz|contract> %angles, %inverse_two_pi_vector : vector<2xf32>
+  %cosines = vector.costurnsf<afn> %turns : vector<2xf32>
+  %sines = vector.sinturnsf<afn> %turns : vector<2xf32>
+  %x_cosines = vector.mulf<reassoc|nnan|ninf|nsz|contract> %x_values, %cosines : vector<2xf32>
+  %y_sines = vector.mulf<reassoc|nnan|ninf|nsz|contract> %y_values, %sines : vector<2xf32>
+  %x_sines = vector.mulf<reassoc|nnan|ninf|nsz|contract> %x_values, %sines : vector<2xf32>
+  %y_cosines = vector.mulf<reassoc|nnan|ninf|nsz|contract> %y_values, %cosines : vector<2xf32>
+  %rotated_x = vector.subf<reassoc|nnan|ninf|nsz> %x_cosines, %y_sines : vector<2xf32>
+  %rotated_y = vector.addf<reassoc|nnan|ninf|nsz> %x_sines, %y_cosines : vector<2xf32>
+  %rotated_x0 = vector.extract %rotated_x[0] : vector<2xf32> -> f32
+  %rotated_x1 = vector.extract %rotated_x[1] : vector<2xf32> -> f32
+  %rotated_y0 = vector.extract %rotated_y[0] : vector<2xf32> -> f32
+  %rotated_y1 = vector.extract %rotated_y[1] : vector<2xf32> -> f32
+  %rotated = vector.from_elements %rotated_x0, %rotated_y0, %rotated_x1, %rotated_y1 : vector<4xf32>
   template.return %rotated : vector<4xf32>
 }
 
@@ -51,13 +77,15 @@ template.def<@llm.attention_qkv.store_query_vector4> device @llm_attention_qkv_s
   %token_count = index.assume %token_count0 [range(%token_count0, 1, 2048)] : index
   %head_size = index.assume %head_size0 [range(%head_size0, 4, 1024), mul(%head_size0, 4)] : index
   %head_count = index.assume %head_count0 [range(%head_count0, 1, 64)] : index
+  %c1 = index.constant 1 : index
   %c0_offset = index.constant 0 : offset
   %head = index.div %channel, %head_size : index
   %head_channel = index.rem %channel, %head_size : index
   %token, %launch_token_count = index.assume %token0, %token_count [lt(%token0, %token_count)] : index, index
   %output_noalias = buffer.assume.noalias %output : buffer
   %output_view = buffer.view %output_noalias[%c0_offset] : buffer -> view<[%token_count]x[%head_count]x[%head_size]xf32>
-  vector.store %values, %output_view[%token, %head, %head_channel] : vector<4xf32>, view<[%token_count]x[%head_count]x[%head_size]xf32>
+  %mask = vector.mask.range [%head_channel to %head_size step %c1] : index -> vector<4xi1>
+  vector.store.mask %values, %output_view[%token, %head, %head_channel], %mask : vector<4xf32>, view<[%token_count]x[%head_count]x[%head_size]xf32>, vector<4xi1>
   template.return
 }
 

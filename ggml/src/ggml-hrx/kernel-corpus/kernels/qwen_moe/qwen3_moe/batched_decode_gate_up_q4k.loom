@@ -26,8 +26,6 @@ config.decl @qwen3_moe.batched_decode.rows2_descriptor_capacity : %value: index 
 
 kernel.decl @ggml_quantize_q8_1_x4_f32(%token_count$8: index, %input_size$9: index) launch(%token_count$10: index, %input_size$11: index, %input: buffer, %output: buffer)
 
-func.decl @qwen3_moe_q4k_chunk_pair_global(%weight: buffer, %row_byte_base: offset, %q4_block: index, %q4_group_pair: index, %q4_half: index, %header_words: vector<4xi32>) -> (vector<16xi8>, f32, f32, vector<16xi8>, f32, f32)
-
 func.decl @qwen3_moe_q4k_q8_1_dot(%q4_values: vector<16xi8>, %d_scale: f32, %dmin_scale: f32, %q8_values: vector<16xi8>, %q8_d: f32, %q8_s: f32) -> (f32)
 
 func.decl @qwen3_moe_unpack_batched_decode_expert_descriptor(%descriptor: vector<4xi32>) -> (index, index, index)
@@ -51,6 +49,7 @@ func.def inline @qwen3_moe_batched_decode_q4k_rows2_lane(%input_size: index, %we
   %c1023 = index.constant 1023 : index
   %c1024 = index.constant 1024 : index
   %q4_block_bytes = index.constant 144 : offset
+  %q4_code_byte_add = index.constant 16 : offset
   %q8_group_bytes = index.constant 144 : offset
   %q8_payload_byte_add = index.constant 16 : offset
   %c0_f32 = scalar.constant 0.0 : f32
@@ -130,7 +129,84 @@ func.def inline @qwen3_moe_batched_decode_q4k_rows2_lane(%input_size: index, %we
       %q4_block_byte_base = index.add %weight_row_byte_base, %q4_block_byte_add : offset
       %header_view = buffer.view %weight[%q4_block_byte_base] : buffer -> view<4xi32>
       %header_words = vector.load %header_view[0] : view<4xi32> -> vector<4xi32>
-      %q4_low, %low_d_scale, %low_dmin_scale, %q4_high, %high_d_scale, %high_dmin_scale = func.call @qwen3_moe_q4k_chunk_pair_global(%weight, %weight_row_byte_base, %q4_block, %q4_group_pair, %q4_half, %header_words) : (buffer, offset, index, index, index, vector<4xi32>) -> (vector<16xi8>, f32, f32, vector<16xi8>, f32, f32)
+      // This buffer-dependent decode cannot be retained as a concrete device
+      // helper, so keep it local to the shared caller.
+      %q4_code_byte_base = index.add %q4_block_byte_base, %q4_code_byte_add : offset
+      %q4_code_view = buffer.view %weight[%q4_code_byte_base] : buffer -> view<32xi32>
+      %pair_code_base = index.mul %q4_group_pair, %c8 : index
+      %half_code_add = index.mul %q4_half, %c4 : index
+      %code_index0 = index.add %pair_code_base, %half_code_add : index
+      %code_index = index.assume %code_index0 [range(%code_index0, 0, 28)] : index
+      %packed_codes = vector.load %q4_code_view[%code_index] : view<32xi32> -> vector<4xi32>
+      %nibble_mask = vector.constant 252645135 : vector<4xi32>
+      %q4_low_codes = vector.andi %packed_codes, %nibble_mask : vector<4xi32>
+      %c4_i32 = scalar.constant 4 : i32
+      %c4_i32v = vector.splat %c4_i32 : vector<4xi32>
+      %q4_high_shifted = vector.shrui %packed_codes, %c4_i32v : vector<4xi32>
+      %q4_high_codes = vector.andi %q4_high_shifted, %nibble_mask : vector<4xi32>
+      %q4_low = vector.bitcast %q4_low_codes : vector<4xi32> to vector<16xi8>
+      %q4_high = vector.bitcast %q4_high_codes : vector<4xi32> to vector<16xi8>
+      %header_halves = vector.bitcast %header_words : vector<4xi32> to vector<8xf16>
+      %d_f16 = vector.extract %header_halves[0] : vector<8xf16> -> f16
+      %dmin_f16 = vector.extract %header_halves[1] : vector<8xf16> -> f16
+      %scale0 = vector.extract %header_words[1] : vector<4xi32> -> i32
+      %scale1 = vector.extract %header_words[2] : vector<4xi32> -> i32
+      %scale2 = vector.extract %header_words[3] : vector<4xi32> -> i32
+      %d = scalar.extf %d_f16 : f16 to f32
+      %dmin = scalar.extf %dmin_f16 : f16 to f32
+      %low_group = index.mul %q4_group_pair, %c2 : index
+      %high_group = index.add %low_group, %c1 : index
+      %c2_i32 = scalar.constant 2 : i32
+      %c15_i32 = scalar.constant 15 : i32
+      %c48_i32 = scalar.constant 48 : i32
+      %low_is_low_group = index.cmp ult, %low_group, %c4 : index
+      %low_scale_lane = index.rem %low_group, %c4 : index
+      %low_scale_shift_index = index.mul %low_scale_lane, %c8 : index
+      %low_scale_shift = index.cast %low_scale_shift_index : index to i32
+      %low_high_shift = scalar.addi %low_scale_shift, %c2_i32 : i32
+      %low_minimum_shift = scalar.addi %low_scale_shift, %c4_i32 : i32
+      %low_selected_scale_source = scf.select %low_is_low_group, %scale0, %scale2 : i32
+      %low_selected_minimum_source = scf.select %low_is_low_group, %scale1, %scale2 : i32
+      %low_selected_scale_high_shift = scf.select %low_is_low_group, %low_scale_shift, %low_high_shift : i32
+      %low_selected_minimum_low_shift = scf.select %low_is_low_group, %low_scale_shift, %low_minimum_shift : i32
+      %low_scale_low0 = scalar.shrui %low_selected_scale_source, %low_scale_shift : i32
+      %low_scale_low = scalar.andi %low_scale_low0, %c15_i32 : i32
+      %low_scale_high0 = scalar.shrui %scale0, %low_selected_scale_high_shift : i32
+      %low_scale_high = scalar.andi %low_scale_high0, %c48_i32 : i32
+      %low_scale = scalar.ori %low_scale_low, %low_scale_high : i32
+      %low_minimum_low0 = scalar.shrui %low_selected_minimum_source, %low_selected_minimum_low_shift : i32
+      %low_minimum_low = scalar.andi %low_minimum_low0, %c15_i32 : i32
+      %low_minimum_high0 = scalar.shrui %scale1, %low_selected_scale_high_shift : i32
+      %low_minimum_high = scalar.andi %low_minimum_high0, %c48_i32 : i32
+      %low_minimum = scalar.ori %low_minimum_low, %low_minimum_high : i32
+      %high_is_low_group = index.cmp ult, %high_group, %c4 : index
+      %high_scale_lane = index.rem %high_group, %c4 : index
+      %high_scale_shift_index = index.mul %high_scale_lane, %c8 : index
+      %high_scale_shift = index.cast %high_scale_shift_index : index to i32
+      %high_high_shift = scalar.addi %high_scale_shift, %c2_i32 : i32
+      %high_minimum_shift = scalar.addi %high_scale_shift, %c4_i32 : i32
+      %high_selected_scale_source = scf.select %high_is_low_group, %scale0, %scale2 : i32
+      %high_selected_minimum_source = scf.select %high_is_low_group, %scale1, %scale2 : i32
+      %high_selected_scale_high_shift = scf.select %high_is_low_group, %high_scale_shift, %high_high_shift : i32
+      %high_selected_minimum_low_shift = scf.select %high_is_low_group, %high_scale_shift, %high_minimum_shift : i32
+      %high_scale_low0 = scalar.shrui %high_selected_scale_source, %high_scale_shift : i32
+      %high_scale_low = scalar.andi %high_scale_low0, %c15_i32 : i32
+      %high_scale_high0 = scalar.shrui %scale0, %high_selected_scale_high_shift : i32
+      %high_scale_high = scalar.andi %high_scale_high0, %c48_i32 : i32
+      %high_scale = scalar.ori %high_scale_low, %high_scale_high : i32
+      %high_minimum_low0 = scalar.shrui %high_selected_minimum_source, %high_selected_minimum_low_shift : i32
+      %high_minimum_low = scalar.andi %high_minimum_low0, %c15_i32 : i32
+      %high_minimum_high0 = scalar.shrui %scale1, %high_selected_scale_high_shift : i32
+      %high_minimum_high = scalar.andi %high_minimum_high0, %c48_i32 : i32
+      %high_minimum = scalar.ori %high_minimum_low, %high_minimum_high : i32
+      %low_scale_f32 = scalar.uitofp %low_scale : i32 to f32
+      %low_minimum_f32 = scalar.uitofp %low_minimum : i32 to f32
+      %high_scale_f32 = scalar.uitofp %high_scale : i32 to f32
+      %high_minimum_f32 = scalar.uitofp %high_minimum : i32 to f32
+      %low_d_scale = scalar.mulf %d, %low_scale_f32 : f32
+      %low_dmin_scale = scalar.mulf %dmin, %low_minimum_f32 : f32
+      %high_d_scale = scalar.mulf %d, %high_scale_f32 : f32
+      %high_dmin_scale = scalar.mulf %dmin, %high_minimum_f32 : f32
       %row0_low = func.call @qwen3_moe_q4k_q8_1_dot(%q4_low, %low_d_scale, %low_dmin_scale, %q8_low_values0, %q8_low_d0, %q8_low_s0) : (vector<16xi8>, f32, f32, vector<16xi8>, f32, f32) -> (f32)
       %row0_high = func.call @qwen3_moe_q4k_q8_1_dot(%q4_high, %high_d_scale, %high_dmin_scale, %q8_high_values0, %q8_high_d0, %q8_high_s0) : (vector<16xi8>, f32, f32, vector<16xi8>, f32, f32) -> (f32)
       %row1_low = func.call @qwen3_moe_q4k_q8_1_dot(%q4_low, %low_d_scale, %low_dmin_scale, %q8_low_values1, %q8_low_d1, %q8_low_s1) : (vector<16xi8>, f32, f32, vector<16xi8>, f32, f32) -> (f32)
