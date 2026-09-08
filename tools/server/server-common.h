@@ -62,6 +62,7 @@ enum error_type {
     ERROR_TYPE_UNAVAILABLE, // custom error
     ERROR_TYPE_NOT_SUPPORTED, // custom error
     ERROR_TYPE_EXCEED_CONTEXT_SIZE, // custom error
+    ERROR_TYPE_INVALID_PROMPT, // custom error - for bad token IDs in prompt array
 };
 
 // thin wrapper around common_grammar_trigger with (de)serialization functions
