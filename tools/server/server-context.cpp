@@ -1709,7 +1709,7 @@ private:
         }
 
         if (!task.tokens.validate(ctx_tgt)) {
-            send_error(task, "Prompt contains invalid tokens", ERROR_TYPE_INVALID_REQUEST);
+            send_error(task, "Prompt contains invalid tokens", ERROR_TYPE_INVALID_PROMPT);
             return false;
         }
 
@@ -2172,7 +2172,7 @@ private:
             task.cli_prompt.clear();
             task.cli_files.clear();
         } catch (const std::exception & e) {
-            send_error(task, std::string("Failed to format input: ") + e.what(), ERROR_TYPE_INVALID_REQUEST);
+            send_error(task, std::string("Failed to format input: ") + e.what(), ERROR_TYPE_INVALID_PROMPT);
             return false;
         }
         return true;
