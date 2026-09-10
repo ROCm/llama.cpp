@@ -1117,7 +1117,6 @@ json oaicompat_chat_params_parse(
 
     auto tools = json_value(body, "tools", json());
     auto has_tools = tools.is_array() && !tools.empty();
-    auto stream = json_value(body, "stream", false);
     auto tool_choice = json_value(body, "tool_choice", std::string("auto"));
 
     if (!opt.use_jinja) {
@@ -1347,11 +1346,11 @@ json oaicompat_chat_params_parse(
     }
 
     // Handle "logprobs" field
-    // TODO: The response format of this option is not yet OAI-compatible, but seems like no one really using it; We may need to fix it in the future
+    // Response is OpenAI-modern shape (choices[].logprobs.content[]); each entry also carries the
+    // integer token id, which is an intentional extension required by RVT scoring. With tools, the
+    // streaming path emits per-token logprobs for all tokens (including tool-call tokens), matching
+    // the non-streaming path.
     if (json_value(body, "logprobs", false)) {
-        if (has_tools && stream) {
-            throw std::invalid_argument("logprobs is not supported with tools + stream");
-        }
         llama_params["n_probs"] = json_value(body, "top_logprobs", 20);
     } else if (body.contains("top_logprobs") && !body.at("top_logprobs").is_null()) {
         throw std::invalid_argument("top_logprobs requires logprobs to be set to true");

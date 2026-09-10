@@ -319,6 +319,49 @@ def test_completion_without_tool_call_fast(template_name: str, n_predict: int, t
     do_test_completion_without_tool_call(server, n_predict, tools, tool_choice, stream=stream == CompletionMode.STREAMED)
 
 
+def test_logprobs_with_tools_stream():
+    # Regression: tools + stream + logprobs used to be rejected with a 400. It is now allowed and,
+    # matching the non-streaming path, emits per-token logprobs (including tool-call tokens) in the
+    # OpenAI-modern shape, retaining the integer token id required by RVT scoring.
+    global server
+    server.jinja = True
+    server.n_predict = 128
+    server.chat_template_file = '../../../models/templates/meta-llama-Llama-3.3-70B-Instruct.jinja'
+    server.start()
+
+    seen_logprobs = False
+    for chunk in server.make_stream_request("POST", "/v1/chat/completions", data={
+        "max_tokens": 128,
+        "messages": [
+            {"role": "system", "content": "You are a coding assistant."},
+            {"role": "user", "content": "Write an example"},
+        ],
+        "tools": [TEST_TOOL],
+        "tool_choice": "required",
+        "parallel_tool_calls": False,
+        "stream": True,
+        "logprobs": True,
+        "top_logprobs": 5,
+    }):
+        if not chunk["choices"]:
+            continue
+        logprobs = chunk["choices"][0].get("logprobs")
+        if not logprobs:
+            continue
+        for entry in logprobs["content"]:
+            seen_logprobs = True
+            assert "id" in entry and isinstance(entry["id"], int)
+            assert "token" in entry
+            assert entry["logprob"] <= 0.0
+            assert entry["bytes"] is not None
+            assert len(entry["top_logprobs"]) > 0
+            for top in entry["top_logprobs"]:
+                assert "id" in top and isinstance(top["id"], int)
+                assert "token" in top
+                assert top["logprob"] <= 0.0
+    assert seen_logprobs, "Expected at least one logprobs entry across the stream"
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize("stream", [CompletionMode.NORMAL, CompletionMode.STREAMED])
 @pytest.mark.parametrize("template_name,n_predict,tools,tool_choice", [
